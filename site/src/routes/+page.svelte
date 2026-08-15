@@ -68,8 +68,8 @@
   <div class="stats">
     <div class="stat"><b>24 h</b><span>from zero to studio</span></div>
     <div class="stat"><b>6</b><span>agent departments</span></div>
-    <div class="stat"><b>5</b><span>human gates</span></div>
-    <div class="stat"><b>10</b><span>proofs before delivery</span></div>
+    <div class="stat"><b>5</b><span>approvals from you</span></div>
+    <div class="stat"><b>10</b><span>checks before it ships</span></div>
     <div class="stat"><b>100%</b><span>local generation</span></div>
   </div>
 </header>
@@ -77,40 +77,42 @@
 <section id="how">
   <div class="wrap">
     <div class="kicker">How it works</div>
-    <h2>Five human gates. One durable film.</h2>
+    <h2>It stops and asks you five times.</h2>
     <p class="lede">
-      You give GRACE one sentence. The crew develops, blocks, shoots, and mixes — but the production
-      halts at every gate until you approve it. Approvals are recorded against content hashes in a
-      durable ledger, so a finished film is provable, not just plausible.
+      You give GRACE one sentence. The agents write, plan, shoot, and mix on their own. At five
+      points the production stops and waits for your sign-off. Each approval is tied to the exact
+      files you saw, so the finished film can't change quietly afterward.
     </p>
     <div class="gates">
       <div class="gate">
         <div class="num">01</div>
         <h3>Brief</h3>
-        <p>Pi resolves only the material creative questions, then locks the target.</p>
+        <p>Pi asks the few questions that matter, then locks in what you're making.</p>
       </div>
       <div class="gate">
         <div class="num">02</div>
         <h3>Treatment</h3>
-        <p>Logline, synopsis, beats, and the film's visual and sound language.</p>
+        <p>The story: logline, synopsis, beats, and how the film should look and sound.</p>
       </div>
       <div class="gate">
         <div class="num">03</div>
         <h3>Production</h3>
-        <p>Cast and location canon, a shot-by-shot plan, takes, and render budget.</p>
+        <p>The plan: cast, locations, a shot-by-shot list, and how many takes to render.</p>
       </div>
       <div class="gate">
         <div class="num">04</div>
         <h3>Picture lock</h3>
         <p>
-          Machines provide evidence — QC, vision inspection, independent critics. You lock the
-          picture.
+          The checks run and the critics weigh in. Then you watch the cut and make the final call.
         </p>
       </div>
       <div class="gate">
         <div class="num">05</div>
         <h3>Delivery</h3>
-        <p>A checksum-backed master, captions, poster — or a verified handoff to Animatic.</p>
+        <p>
+          The finished film with captions and a poster, plus a receipt for every file. Or hand it
+          to Animatic for editing.
+        </p>
       </div>
     </div>
   </div>
@@ -138,7 +140,7 @@
       <div class="member">
         <h3>Casting director</h3>
         <div class="role">PREPRODUCTION</div>
-        <p>Creates canonical cast and location masters so every frame stays consistent.</p>
+        <p>Creates the reference images for cast and locations so every frame stays consistent.</p>
       </div>
       <div class="member">
         <h3>Sound designer</h3>
@@ -148,7 +150,7 @@
       <div class="member">
         <h3>Continuity supervisor</h3>
         <div class="role">PRODUCTION</div>
-        <p>Checks every generated take against the canon before it can be selected.</p>
+        <p>Checks every generated take against those references before it can be selected.</p>
       </div>
       <div class="member">
         <h3>Independent critic</h3>
@@ -164,8 +166,7 @@
     <div class="kicker">Screens</div>
     <h2>A native macOS control room.</h2>
     <p class="lede">
-      Swift and SwiftUI, with an embedded Ghostty terminal for talking to Pi mid-production. Not a
-      web view in a trench coat.
+      Swift and SwiftUI, with a built-in Ghostty terminal for talking to Pi mid-production.
     </p>
     <div class="screens">
       <figure class="screen">
@@ -190,7 +191,8 @@
           />
         </div>
         <figcaption>
-          <b>Development.</b> Treatment, story beats, and the continuity canon the whole crew works from.
+          <b>Development.</b> Treatment, story beats, and the cast and location references the whole
+          crew works from.
         </figcaption>
       </figure>
       <figure class="screen">
@@ -202,7 +204,7 @@
           />
         </div>
         <figcaption>
-          <b>Review.</b> Machines provide evidence; you lock the picture against its hash.
+          <b>Review.</b> The checks gather the evidence. You watch the cut and make the final call.
         </figcaption>
       </figure>
       <figure class="screen">
@@ -214,7 +216,8 @@
           />
         </div>
         <figcaption>
-          <b>Delivery.</b> Ten proofs, a checksum-bound master, and a verified push to Animatic.
+          <b>Delivery.</b> All ten checks passed: the finished film, its receipts, and a verified
+          push to Animatic.
         </figcaption>
       </figure>
     </div>
@@ -223,29 +226,38 @@
 
 <section id="proof">
   <div class="wrap">
-    <div class="kicker">The proof stack</div>
-    <h2>Every promise is proved.</h2>
+    <div class="kicker">Quality checks</div>
+    <h2>Ten checks before it ships.</h2>
     <p class="lede">
-      Delivery is blocked until all ten checks pass. Change any surface after approval and the lock
-      breaks.
+      GRACE will not call a film finished until all ten pass. They confirm the film plays, the
+      dialogue is clear, the sound level is right, and the files you approved are the files you
+      get.
     </p>
     <div class="proofs">
-      <div class="proof"><span class="tick">✓</span>Creation canon<span>cast + locations</span></div>
-      <div class="proof"><span class="tick">✓</span>Selected clips<span>every shot</span></div>
-      <div class="proof"><span class="tick">✓</span>Playable assembly<span>real mp4</span></div>
       <div class="proof">
-        <span class="tick">✓</span>Dialogue intelligibility<span>ASR-checked</span>
-      </div>
-      <div class="proof"><span class="tick">✓</span>Sound and loudness<span>-16 LUFS</span></div>
-      <div class="proof"><span class="tick">✓</span>Caption sidecars<span>generated</span></div>
-      <div class="proof">
-        <span class="tick">✓</span>Visual inspection<span>local vision model</span>
+        <span class="tick">✓</span>Characters and places stay consistent<span>shot to shot</span>
       </div>
       <div class="proof">
-        <span class="tick">✓</span>Independent review<span>critic agents</span>
+        <span class="tick">✓</span>Every shot has a chosen take<span>no gaps</span>
       </div>
-      <div class="proof"><span class="tick">✓</span>Human decision<span>hash-bound</span></div>
-      <div class="proof"><span class="tick">✓</span>Delivery manifest<span>SHA-256</span></div>
+      <div class="proof"><span class="tick">✓</span>The cut actually plays<span>real mp4</span></div>
+      <div class="proof">
+        <span class="tick">✓</span>You can understand the dialogue<span>speech-to-text verified</span>
+      </div>
+      <div class="proof">
+        <span class="tick">✓</span>Sound sits at the right level<span>-16 LUFS</span>
+      </div>
+      <div class="proof"><span class="tick">✓</span>Captions are included<span>generated</span></div>
+      <div class="proof">
+        <span class="tick">✓</span>Every frame gets looked at<span>local vision model</span>
+      </div>
+      <div class="proof">
+        <span class="tick">✓</span>A second opinion on the cut<span>critic agents</span>
+      </div>
+      <div class="proof"><span class="tick">✓</span>You signed off on it<span>recorded</span></div>
+      <div class="proof">
+        <span class="tick">✓</span>Shipped files match approved files<span>SHA-256</span>
+      </div>
     </div>
   </div>
 </section>
