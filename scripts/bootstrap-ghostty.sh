@@ -24,13 +24,6 @@ for command_name in git zig xcodebuild; do
   fi
 done
 
-actual_zig=$(zig version)
-if [[ "$actual_zig" != "$zig_version" ]]; then
-  echo "Ghostty $version requires Zig $zig_version; found $actual_zig." >&2
-  echo "Install anyzig with Homebrew to select the pinned toolchain automatically." >&2
-  exit 1
-fi
-
 checkout=$(mktemp -d "${TMPDIR:-/tmp}/mere-film-ghostty.XXXXXX")
 trap 'rm -rf "$checkout"' EXIT
 
@@ -45,14 +38,22 @@ if [[ "$actual_commit" != "$commit" ]]; then
   exit 1
 fi
 
-echo "Building GhosttyKit $version ($commit) with Zig $actual_zig..."
-zig build -Doptimize=ReleaseFast -Demit-xcframework=true -Demit-macos-app=false \
-  --prefix "$checkout/zig-out" \
-  --summary all \
-  --search-prefix "$checkout" \
-  --build-file "$checkout/build.zig"
+actual_zig=$(cd "$checkout" && zig version)
+if [[ "$actual_zig" != "$zig_version" ]]; then
+  echo "Ghostty $version requires Zig $zig_version; found $actual_zig." >&2
+  echo "Install anyzig with Homebrew to select the pinned toolchain automatically." >&2
+  exit 1
+fi
 
-built="$checkout/zig-out/GhosttyKit.xcframework"
+echo "Building GhosttyKit $version ($commit) with Zig $actual_zig..."
+(
+  cd "$checkout"
+  zig build -Doptimize=ReleaseFast -Demit-xcframework=true -Demit-macos-app=false \
+    --prefix "$checkout/zig-out" \
+    --summary all
+)
+
+built="$checkout/macos/GhosttyKit.xcframework"
 if [[ ! -f "$built/Info.plist" ]]; then
   echo "Ghostty build did not produce GhosttyKit.xcframework." >&2
   exit 1

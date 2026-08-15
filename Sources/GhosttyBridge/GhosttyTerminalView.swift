@@ -71,6 +71,10 @@ public struct GhosttyTerminalView: NSViewRepresentable {
     public func updateNSView(_ view: GhosttySurfaceView, context: Context) {
         view.updateAppearance()
     }
+
+    public static func dismantleNSView(_ view: GhosttySurfaceView, coordinator: ()) {
+        view.shutdown()
+    }
 }
 
 @MainActor
@@ -137,7 +141,14 @@ public final class GhosttySurfaceView: NSView {
     }
 
     deinit {
-        if let surface { ghostty_surface_free(surface) }
+        guard let surface else { return }
+        if Thread.isMainThread {
+            ghostty_surface_free(surface)
+        } else {
+            Task.detached { @MainActor in
+                ghostty_surface_free(surface)
+            }
+        }
     }
 
     public override func layout() {
@@ -147,10 +158,16 @@ public final class GhosttySurfaceView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        updateAppearance()
         updateSurfaceGeometry()
         if let window, let screen = window.screen, let surface {
             ghostty_surface_set_display_id(surface, screen.displayID)
         }
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
     }
 
     public override func viewDidChangeBackingProperties() {
@@ -225,6 +242,22 @@ public final class GhosttySurfaceView: NSView {
 
     fileprivate func childExited() {
         model.processExited = true
+    }
+
+    fileprivate func shutdown() {
+        guard let surface else { return }
+        if isFocused {
+            ghostty_surface_set_focus(surface, false)
+            isFocused = false
+        }
+        self.surface = nil
+        ghostty_surface_free(surface)
+
+        // libghostty installs an IOSurface-backed layer on this view. SwiftUI
+        // may retain a dismantled NSView, so detach that layer immediately
+        // instead of waiting for deinitialization.
+        layer = nil
+        wantsLayer = false
     }
 
     private func updateFocus(_ focused: Bool) {

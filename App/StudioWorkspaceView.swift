@@ -4,7 +4,6 @@ import SwiftUI
 
 struct StudioWorkspaceView: View {
     @EnvironmentObject private var studio: StudioModel
-    @StateObject private var terminalModel = GhosttyTerminalModel()
 
     var body: some View {
         if let snapshot = studio.snapshot {
@@ -22,7 +21,8 @@ struct StudioWorkspaceView: View {
                     .frame(minWidth: 620, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity)
 
                     if studio.terminalVisible {
-                        PiRoom(snapshot: snapshot, model: terminalModel)
+                        PiRoom(snapshot: snapshot)
+                            .id(studio.terminalSessionID)
                             .frame(minHeight: 190, idealHeight: 285)
                     }
                 }
@@ -217,8 +217,8 @@ private struct SidebarHealthRow: View {
 
 private struct PiRoom: View {
     @EnvironmentObject private var studio: StudioModel
+    @StateObject private var model = GhosttyTerminalModel()
     let snapshot: FilmWorkspaceSnapshot
-    @ObservedObject var model: GhosttyTerminalModel
 
     var body: some View {
         VStack(spacing: 0) {
@@ -258,7 +258,7 @@ private struct PiRoom: View {
                     ]) { _, override in override },
                     model: model
                 )
-                .id(studio.terminalSessionID)
+                .clipped()
             } else {
                 ContentUnavailableView(
                     "Pi room unavailable",
@@ -268,5 +268,6 @@ private struct PiRoom: View {
             }
         }
         .background(Color(red: 0.035, green: 0.032, blue: 0.043))
+        .clipped()
     }
 }

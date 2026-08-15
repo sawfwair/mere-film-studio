@@ -72,13 +72,13 @@ extension StudioModel {
                 }
                 try Task.checkCancellation()
                 guard snapshot?.runManifest == runManifest else { return }
+                terminalSessionID = UUID()
                 piRoomConfiguration = PiRoomConfiguration(
                     launchSpec: resolvedLaunchSpec,
                     mereRunExecutable: mereRun,
                     piExecutable: pi,
                     model: model
                 )
-                terminalSessionID = UUID()
             } catch is CancellationError {
                 return
             } catch {
