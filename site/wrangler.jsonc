@@ -9,6 +9,13 @@
     "directory": ".svelte-kit/cloudflare",
     "binding": "ASSETS"
   },
+  "r2_buckets": [
+    { "binding": "GRACE_RELEASES", "bucket_name": "grace-releases" }
+  ],
+  "vars": {
+    "GRACE_RELEASE_VERSION": "0.1.0",
+    "GRACE_RELEASE_SHA256": "582277f3c5e5fff2114236f8413d822449ff362d8a0438a3c8a828a462438abf"
+  },
   "observability": {
     "enabled": true
   },

@@ -145,6 +145,12 @@ h1 .out {
   color: var(--accent);
   font-weight: 700;
 }
+.download-note {
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 12px;
+  margin-top: 12px;
+}
 .cta {
   display: flex;
   gap: 12px;
@@ -378,6 +384,29 @@ h2 {
 }
 
 /* Quickstart */
+.download-card {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(237, 171, 77, 0.12), rgba(237, 171, 77, 0.04));
+  border: 1px solid rgba(237, 171, 77, 0.32);
+  border-radius: 12px;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin-top: 28px;
+  padding: 20px 22px;
+}
+.download-card b,
+.download-card span {
+  display: block;
+}
+.download-card b {
+  font-size: 16px;
+}
+.download-card span {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin-top: 3px;
+}
 pre {
   background: #0e0e11;
   border: 1px solid var(--stroke);
@@ -454,5 +483,12 @@ footer {
   }
   .nav-links {
     display: none;
+  }
+  .download-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .download-card .btn {
+    text-align: center;
   }
 }

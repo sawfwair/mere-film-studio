@@ -52,9 +52,10 @@
     </p>
     <p class="acronym"><b>GR</b>oup of <b>A</b>gents for <b>C</b>reating <b>E</b>ntertainment</p>
     <div class="cta">
-      <a class="btn btn-primary" href="#quickstart">Get GRACE</a>
+      <a class="btn btn-primary" href="/download">Download for Mac</a>
       <a class="btn btn-ghost" href="https://github.com/sawfwair/mere-film-studio">View on GitHub</a>
     </div>
+    <p class="download-note">v0.1.0 · Apple Silicon · macOS 15 or newer · notarized by Apple</p>
   </div>
   <div class="wrap hero-shot">
     <figure class="shot">
@@ -290,9 +291,17 @@
     <div class="kicker">Quickstart</div>
     <h2>Try it yourself.</h2>
     <p class="lede">
-      GRACE is open source. You bring an Apple Silicon Mac and the local toolchain; it brings the
-      studio.
+      Download the native control room, drag it to Applications, and connect it to your local
+      production crew. The source build remains available for anyone who wants to inspect or extend
+      the agent system.
     </p>
+    <div class="download-card">
+      <div>
+        <b>GRACE Film Studio 0.1.0</b>
+        <span>Notarized installer for Apple Silicon Macs</span>
+      </div>
+      <a class="btn btn-primary" href="/download">Download DMG</a>
+    </div>
     <pre><span class="c"># Requires Apple Silicon macOS 15+, Xcode 26+, XcodeGen</span>
 <span class="p">$</span> git clone https://github.com/sawfwair/mere-film-studio
 <span class="p">$</span> cd mere-film-studio

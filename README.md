@@ -52,8 +52,22 @@ bundle, and produce a drag-to-Applications disk image:
 ```
 
 Artifacts land in `.build/release/`. The ad-hoc signature is intended for local
-development and direct testing; public distribution still requires a Developer
-ID Application certificate and Apple notarization.
+development and direct testing.
+
+For public distribution, select the Developer ID certificate by fingerprint and
+reuse the saved notary profile from `mere-run-release-tools`:
+
+```bash
+SIGN_IDENTITY=<developer-id-sha1> \
+NOTARIZE=1 \
+RELEASE_TOOLS_ROOT=../mere-run-release-tools \
+./scripts/package-app.sh
+```
+
+That path enables the hardened runtime, signs nested frameworks before sealing
+the app, notarizes and staples the app, creates and signs the DMG, then notarizes
+and staples the disk image. Credentials remain in the release toolchain's
+keychain profile and are never copied into this repository.
 
 ## Runtime requirements
 
