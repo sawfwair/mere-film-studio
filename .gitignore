@@ -1,0 +1,11 @@
+.DS_Store
+.build/
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+MereFilmStudio.xcodeproj/
+Vendor/GhosttyKit.xcframework/
+Vendor/ghostty/
+Generated/
+.swiftpm/

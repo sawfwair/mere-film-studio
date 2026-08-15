@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/ghostty-org/ghostty.git",
+  "version": "1.3.2-dev",
+  "commit": "6b22215c5d46019f94b658f7665941f951d0de1e",
+  "zig": "0.16.0",
+  "license": "MIT"
+}
