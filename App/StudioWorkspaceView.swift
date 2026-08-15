@@ -7,33 +7,40 @@ struct StudioWorkspaceView: View {
     @StateObject private var terminalModel = GhosttyTerminalModel()
 
     var body: some View {
-        guard let snapshot = studio.snapshot else { return AnyView(EmptyView()) }
-        return AnyView(
-            VStack(spacing: 0) {
-                StudioToolbar(snapshot: snapshot)
-                Divider().opacity(0.45)
+        if let snapshot = studio.snapshot {
+            HSplitView {
+                StudioSidebar(snapshot: snapshot)
+                    .frame(minWidth: 208, idealWidth: 230, maxWidth: 280)
 
-                HSplitView {
-                    StudioSidebar(snapshot: snapshot)
-                        .frame(minWidth: 205, idealWidth: 225, maxWidth: 260)
-
-                    VSplitView {
+                VSplitView {
+                    ZStack {
                         sectionView(snapshot)
-                            .frame(minWidth: 720, minHeight: 460)
-
-                        if studio.terminalVisible {
-                            PiRoom(snapshot: snapshot, model: terminalModel)
-                                .frame(minHeight: 190, idealHeight: 285)
-                        }
+                            .id(studio.section)
+                            .transition(.opacity)
                     }
+                    .animation(.easeOut(duration: 0.18), value: studio.section)
+                    .frame(minWidth: 620, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity)
 
-                    if studio.inspectorVisible {
-                        StudioInspector(snapshot: snapshot)
-                            .frame(minWidth: 260, idealWidth: 300, maxWidth: 360)
+                    if studio.terminalVisible {
+                        PiRoom(snapshot: snapshot, model: terminalModel)
+                            .frame(minHeight: 190, idealHeight: 285)
                     }
                 }
+                .layoutPriority(1)
+
+                if studio.inspectorVisible {
+                    StudioInspector(snapshot: snapshot)
+                        .frame(minWidth: 260, idealWidth: 300, maxWidth: 380)
+                }
             }
-        )
+            .navigationTitle(snapshot.project.title)
+            .navigationSubtitle(subtitle(snapshot))
+            .toolbar { WorkspaceToolbar(snapshot: snapshot) }
+        }
+    }
+
+    private func subtitle(_ snapshot: FilmWorkspaceSnapshot) -> String {
+        "\(StudioText.humanize(snapshot.project.phase)) · \(StudioText.humanize(snapshot.project.production.mode)) mode"
     }
 
     @ViewBuilder
@@ -49,60 +56,59 @@ struct StudioWorkspaceView: View {
     }
 }
 
-private struct StudioToolbar: View {
+private struct WorkspaceToolbar: ToolbarContent {
     @EnvironmentObject private var studio: StudioModel
     let snapshot: FilmWorkspaceSnapshot
 
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "camera.aperture")
-                .font(.title2)
-                .foregroundStyle(StudioPalette.amber)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(snapshot.project.title)
-                    .font(.headline)
-                Text("\(snapshot.project.phase.uppercased())  ·  \(snapshot.project.production.mode.uppercased())")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .tracking(1.2)
-                    .foregroundStyle(.secondary)
-            }
-
-            StatusCapsule(status: snapshot.project.status)
-            Spacer()
-
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            StatusBadge(status: snapshot.project.status)
+        }
+        ToolbarItemGroup {
             if studio.isBusy {
-                ProgressView()
-                    .controlSize(.small)
-                Text(studio.activity)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(studio.activity)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: 260)
+                }
+                .transition(.opacity)
             }
+            Button {
+                studio.refresh()
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .help("Refresh project")
 
-            Button { studio.refresh() } label: { Image(systemName: "arrow.clockwise") }
-                .help("Refresh project")
-            Button { studio.terminalVisible.toggle() } label: {
-                Image(systemName: studio.terminalVisible ? "terminal.fill" : "terminal")
+            Button {
+                studio.terminalVisible.toggle()
+            } label: {
+                Label("Pi room", systemImage: studio.terminalVisible ? "terminal.fill" : "terminal")
             }
-            .help("Show or hide the Pi room")
-            Button { studio.inspectorVisible.toggle() } label: {
-                Image(systemName: "sidebar.right")
+            .help(studio.terminalVisible ? "Hide the Pi room" : "Show the Pi room")
+
+            Button {
+                studio.inspectorVisible.toggle()
+            } label: {
+                Label("Inspector", systemImage: "sidebar.trailing")
             }
-            .help("Show or hide the inspector")
+            .help(studio.inspectorVisible ? "Hide the inspector" : "Show the inspector")
+
             Menu {
                 Button("Recover interrupted work") { studio.recover() }
-                Button("Reveal project in Finder") { NSWorkspace.shared.activateFileViewerSelecting([snapshot.runManifest]) }
+                Button("Reveal project in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([snapshot.runManifest])
+                }
                 Divider()
                 Button("Close project") { studio.closeProject() }
             } label: {
-                Image(systemName: "ellipsis.circle")
+                Label("More", systemImage: "ellipsis.circle")
             }
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
     }
 }
 
@@ -111,56 +117,101 @@ private struct StudioSidebar: View {
     let snapshot: FilmWorkspaceSnapshot
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("PRODUCTION").studioEyebrow()
-                ForEach(StudioSection.allCases) { section in
-                    Button {
-                        studio.section = section
-                    } label: {
-                        HStack(spacing: 11) {
-                            Image(systemName: section.symbol)
-                                .frame(width: 20)
-                            Text(section.label)
-                            Spacer()
-                            if section == .review, !snapshot.project.reviewRequests.isEmpty {
-                                Text("\(snapshot.project.reviewRequests.count)")
-                                    .font(.caption2.bold())
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(StudioPalette.rose.opacity(0.25), in: Capsule())
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(StudioSection.allCases) { section in
+                            SidebarRow(
+                                section: section,
+                                selected: studio.section == section,
+                                badge: section == .review ? snapshot.project.reviewRequests.count : 0
+                            ) {
+                                studio.section = section
                             }
                         }
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 9)
-                        .foregroundStyle(studio.section == section ? .white : .secondary)
-                        .background(
-                            studio.section == section ? .white.opacity(0.10) : .clear,
-                            in: RoundedRectangle(cornerRadius: 9)
-                        )
                     }
-                    .buttonStyle(.plain)
-                }
-            }
 
-            Divider().opacity(0.45)
-            GateRail(approvals: snapshot.project.approvals)
-            Spacer()
-
-            HStack {
-                Image(systemName: snapshot.project.issues.contains(where: \.blocking) ? "exclamationmark.triangle.fill" : "checkmark.shield.fill")
-                    .foregroundStyle(snapshot.project.issues.contains(where: \.blocking) ? StudioPalette.rose : StudioPalette.mint)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(snapshot.project.issues.contains(where: \.blocking) ? "Action needed" : "Ledger healthy")
-                        .font(.caption.bold())
-                    Text("\(snapshot.project.artifacts.count) verified artifacts")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Gates")
+                            .fieldLabel()
+                            .padding(.horizontal, 10)
+                        GateRail(approvals: snapshot.project.approvals)
+                            .padding(.horizontal, 10)
+                    }
                 }
+                .padding(12)
             }
+            Spacer(minLength: 0)
+            SidebarHealthRow(snapshot: snapshot)
         }
-        .padding(16)
-        .background(.black.opacity(0.14))
+        .background(Studio.recessed)
+    }
+}
+
+private struct SidebarRow: View {
+    let section: StudioSection
+    let selected: Bool
+    let badge: Int
+    let activate: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: activate) {
+            HStack(spacing: 10) {
+                Image(systemName: section.symbol)
+                    .frame(width: 20)
+                    .foregroundStyle(selected ? Studio.accent : .secondary)
+                Text(section.label)
+                    .font(.body.weight(selected ? .semibold : .regular))
+                Spacer(minLength: 0)
+                if badge > 0 {
+                    Text("\(badge)")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Studio.accent.opacity(0.22), in: Capsule())
+                        .foregroundStyle(Studio.accent)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .contentShape(RoundedRectangle(cornerRadius: Studio.radiusSmall + 2, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(selected ? .primary : .secondary)
+        .background(
+            Color.white.opacity(selected ? 0.09 : (hovering ? 0.05 : 0)),
+            in: RoundedRectangle(cornerRadius: Studio.radiusSmall + 2, style: .continuous)
+        )
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .onHover { hovering = $0 }
+    }
+}
+
+private struct SidebarHealthRow: View {
+    let snapshot: FilmWorkspaceSnapshot
+
+    private var blocked: Bool {
+        snapshot.project.issues.contains(where: \.blocking)
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: blocked ? "exclamationmark.triangle.fill" : "checkmark.shield.fill")
+                .foregroundStyle(blocked ? Studio.fail : Studio.pass)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(blocked ? "Action needed" : "Ledger healthy")
+                    .font(.caption.weight(.semibold))
+                Text("\(snapshot.project.artifacts.count) verified artifacts")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(.black.opacity(0.18))
     }
 }
 
@@ -171,21 +222,20 @@ private struct PiRoom: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Label("PI ROOM", systemImage: "sparkles")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .tracking(1.5)
-                    .foregroundStyle(StudioPalette.amber)
+            HStack(spacing: 10) {
+                Label("Pi room", systemImage: "terminal")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Studio.accent)
                 Text(model.title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer()
                 Circle()
-                    .fill(model.processExited ? StudioPalette.rose : (model.rendererHealthy ? StudioPalette.mint : StudioPalette.rose))
+                    .fill(model.processExited ? Studio.fail : (model.rendererHealthy ? Studio.pass : Studio.fail))
                     .frame(width: 7, height: 7)
                 Text(model.processExited ? "SESSION ENDED" : "GHOSTTY · LOCAL")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.tertiary)
                 Button {
                     studio.restartTerminal()

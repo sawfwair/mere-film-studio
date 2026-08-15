@@ -5,19 +5,22 @@ struct StudioRootView: View {
     @EnvironmentObject private var studio: StudioModel
 
     var body: some View {
-        ZStack {
-            StudioBackdrop()
+        Group {
             if studio.snapshot == nil {
-                WelcomeView()
+                ZStack {
+                    StudioBackdrop()
+                    WelcomeView()
+                }
             } else {
                 StudioWorkspaceView()
+                    .background(StudioBackdrop())
             }
         }
         .sheet(isPresented: $studio.showCreateFilm) {
             CreateFilmView()
                 .environmentObject(studio)
         }
-        .alert("The studio hit a problem", isPresented: errorBinding) {
+        .alert("Couldn’t complete that", isPresented: errorBinding) {
             Button("OK", role: .cancel) { studio.errorMessage = nil }
         } message: {
             Text(studio.errorMessage ?? "Unknown error")
@@ -31,21 +34,17 @@ struct StudioRootView: View {
         )
     }
 }
+
+/// Near-flat charcoal ground with a barely-there warm cast in one corner.
 struct StudioBackdrop: View {
     var body: some View {
         ZStack {
-            Color(red: 0.045, green: 0.041, blue: 0.059)
+            Studio.backdrop
             RadialGradient(
-                colors: [StudioPalette.violet.opacity(0.18), .clear],
+                colors: [Studio.accent.opacity(0.045), .clear],
                 center: .topLeading,
-                startRadius: 20,
-                endRadius: 760
-            )
-            RadialGradient(
-                colors: [StudioPalette.amber.opacity(0.10), .clear],
-                center: .bottomTrailing,
-                startRadius: 10,
-                endRadius: 620
+                startRadius: 40,
+                endRadius: 900
             )
         }
         .ignoresSafeArea()

@@ -2,103 +2,132 @@ import SwiftUI
 
 struct WelcomeView: View {
     @EnvironmentObject private var studio: StudioModel
+    @State private var appeared = false
 
     var body: some View {
-        HStack(spacing: 72) {
+        HStack(spacing: 64) {
             VStack(alignment: .leading, spacing: 28) {
-                Label("MERE FILM STUDIO", systemImage: "sparkles")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .tracking(2.8)
-                    .foregroundStyle(StudioPalette.amber)
+                HStack(spacing: 10) {
+                    Image(systemName: "camera.aperture")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Studio.accent)
+                    Text("MERE FILM STUDIO")
+                        .font(.system(size: 12, weight: .semibold))
+                        .tracking(2.4)
+                        .foregroundStyle(.secondary)
+                }
+                .entrance(appeared, delay: 0)
 
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("An idea walks in.")
                     Text("A film walks out.")
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [StudioPalette.amber, StudioPalette.rose],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
                 }
-                .font(.system(size: 58, weight: .bold, design: .rounded))
-                .tracking(-2.5)
+                .font(.system(size: 54, weight: .semibold))
+                .tracking(-1.2)
+                .entrance(appeared, delay: 0.08)
 
-                Text("Pi directs a full creative department. Local Mere models create every frame, voice, sound, and score. You stay in control at every gate.")
+                Text("Pi runs the departments. Local Mere models make every frame, voice, sound, and note of score — all on this machine. Nothing advances without your approval.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .lineSpacing(5)
-                    .frame(maxWidth: 590, alignment: .leading)
+                    .frame(maxWidth: 560, alignment: .leading)
+                    .entrance(appeared, delay: 0.16)
 
                 HStack(spacing: 12) {
                     Button {
                         studio.showCreateFilm = true
                     } label: {
-                        Label("Start a film", systemImage: "sparkles.rectangle.stack")
-                            .frame(minWidth: 130)
+                        Label("Start a film", systemImage: "plus")
+                            .frame(minWidth: 124)
                     }
                     .buttonStyle(StudioPrimaryButtonStyle())
+                    .keyboardShortcut(.defaultAction)
 
                     Button {
                         studio.chooseProject()
                     } label: {
-                        Label("Open a production", systemImage: "folder")
+                        Label("Open a film…", systemImage: "folder")
                     }
                     .buttonStyle(StudioSecondaryButtonStyle())
                 }
+                .entrance(appeared, delay: 0.24)
             }
 
-            ZStack {
-                RoundedRectangle(cornerRadius: 38, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 38, style: .continuous)
-                            .strokeBorder(.white.opacity(0.10))
-                    }
-                    .shadow(color: StudioPalette.violet.opacity(0.22), radius: 70, y: 30)
-
-                VStack(spacing: 30) {
-                    Image(systemName: "camera.aperture")
-                        .font(.system(size: 92, weight: .ultraLight))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(StudioPalette.amber, StudioPalette.violet)
-
-                    GateConstellation()
-
-                    Text("Five human gates. One durable film.")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(36)
-            }
-            .frame(width: 450, height: 510)
+            GateCard()
+                .entrance(appeared, delay: 0.3)
         }
-        .padding(72)
+        .padding(64)
+        .onAppear { appeared = true }
     }
 }
 
-private struct GateConstellation: View {
-    private let gates = ["Brief", "Treatment", "Production", "Picture", "Delivery"]
+/// Illustration of the pipeline — deliberately dimmed and static so it reads
+/// as a diagram, not live status.
+private struct GateCard: View {
+    private let gates = ["Brief", "Treatment", "Production", "Picture lock", "Delivery"]
 
     var body: some View {
-        VStack(spacing: 16) {
-            ForEach(Array(gates.enumerated()), id: \.offset) { index, gate in
-                HStack(spacing: 14) {
-                    ZStack {
-                        Circle().fill(index == 0 ? StudioPalette.amber : .white.opacity(0.08))
-                        Text("\(index + 1)")
-                            .font(.caption.bold())
-                            .foregroundStyle(index == 0 ? .black : .secondary)
-                    }
-                    .frame(width: 28, height: 28)
-                    Text(gate)
-                        .font(.system(.body, design: .rounded, weight: .semibold))
-                    Spacer()
-                    Image(systemName: index == 0 ? "arrow.right" : "lock")
-                        .foregroundStyle(index == 0 ? StudioPalette.amber : Color.secondary.opacity(0.5))
+        VStack(spacing: 28) {
+            Image(systemName: "camera.aperture")
+                .font(.system(size: 76, weight: .ultraLight))
+                .foregroundStyle(Studio.accent.opacity(0.9))
+
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(gates.enumerated()), id: \.offset) { index, gate in
+                    GateIllustrationRow(number: index + 1, name: gate, isFirst: index == 0, isLast: index == gates.count - 1)
                 }
             }
+            .frame(maxWidth: 220)
+
+            Text("Five human gates. One durable film.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
+        .padding(40)
+        .frame(width: 380)
+        .background(Studio.raised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Studio.stroke)
+        }
+    }
+}
+
+private struct GateIllustrationRow: View {
+    let number: Int
+    let name: String
+    let isFirst: Bool
+    let isLast: Bool
+
+    var body: some View {
+        HStack(spacing: 14) {
+            VStack(spacing: 0) {
+                Text("\(number)")
+                    .font(.system(.caption, design: .monospaced, weight: .semibold))
+                    .foregroundStyle(isFirst ? AnyShapeStyle(Studio.accent) : AnyShapeStyle(.tertiary))
+                    .frame(width: 22, height: 22)
+                    .background(
+                        Circle().strokeBorder(isFirst ? Studio.accent.opacity(0.6) : Studio.stroke)
+                    )
+                if !isLast {
+                    Rectangle()
+                        .fill(Studio.stroke)
+                        .frame(width: 1, height: 16)
+                }
+            }
+            Text(name)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(isFirst ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .padding(.bottom, isLast ? 0 : 16)
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+private extension View {
+    func entrance(_ appeared: Bool, delay: Double) -> some View {
+        opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 14)
+            .animation(.easeOut(duration: 0.5).delay(delay), value: appeared)
     }
 }
