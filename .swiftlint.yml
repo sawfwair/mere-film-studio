@@ -1,0 +1,18 @@
+disabled_rules:
+  - cyclomatic_complexity
+  - file_length
+  - function_body_length
+  - identifier_name
+  - inclusive_language
+  - large_tuple
+  - optional_data_string_conversion
+  - trailing_comma
+
+line_length:
+  warning: 240
+  error: 260
+
+included:
+  - App
+  - Sources
+  - Tests
