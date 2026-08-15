@@ -43,7 +43,7 @@
 
 <header id="top">
   <div class="wrap">
-    <div class="badge"><span class="dot"></span>BUILT IN 24 HOURS · NOW OPEN TO EVERYONE</div>
+    <div class="badge"><span class="dot"></span>BUILT IN 24 HOURS AT PEI TECH WEEK · OPEN TO EVERYONE</div>
     <h1>An idea walks in.<br /><span class="out">A film walks out.</span></h1>
     <p class="sub">
       <strong>GRACE</strong> is a multi-agent film studio that runs entirely on your Mac. Pi directs
@@ -317,8 +317,11 @@
     <span>GRoup of Agents for Creating Entertainment</span>
     <span class="spacer"></span>
     <span
-      >Built in 24 hours on <a href="https://mere.run">mere.run</a> ·
-      <a href="https://github.com/sawfwair/mere-film-studio">Source on GitHub</a></span
+      >Built in 24 hours at the
+      <a href="https://locarius.io/events/4560/pei-tech-week-hackathon-with-upei"
+        >PEI Tech Week Hackathon with UPEI</a
+      >
+      · <a href="https://github.com/sawfwair/mere-film-studio">Source on GitHub</a></span
     >
   </div>
 </footer>
