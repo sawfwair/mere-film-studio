@@ -1,0 +1,27 @@
+{
+  "name": "grace-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.8.1",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync || echo ''",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "verify": "pnpm check && pnpm build",
+    "deploy": "pnpm verify && wrangler deploy"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-cloudflare": "^7.2.8",
+    "@sveltejs/kit": "^2.57.1",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@types/node": "^26.2.0",
+    "svelte": "^5.55.0",
+    "svelte-check": "^4.4.6",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.5",
+    "wrangler": "^4.78.0"
+  }
+}
