@@ -55,11 +55,14 @@ if [[ "$actual_commit" != "$commit" ]]; then
 fi
 
 echo "Building GhosttyKit $version ($commit) with Zig $actual_zig..."
-"${zig_cmd[@]}" build -Doptimize=ReleaseFast -Demit-xcframework=true -Demit-macos-app=false \
-  --prefix "$checkout/zig-out" \
-  --summary all \
-  --search-prefix "$checkout" \
-  --build-file "$checkout/build.zig"
+# Run from inside the checkout: Ghostty's xcframework step emits to a path
+# relative to the process working directory, not the build root.
+(
+  cd "$checkout"
+  "${zig_cmd[@]}" build -Doptimize=ReleaseFast -Demit-xcframework=true -Demit-macos-app=false \
+    --prefix "$checkout/zig-out" \
+    --summary all
+)
 
 # The emit location has moved between Ghostty revisions (zig-out/ vs the
 # macos/ source tree), so locate it instead of assuming.
