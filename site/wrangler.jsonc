@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "grace",
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "compatibility_date": "2026-04-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "account_id": "d49787aa3908b52ac1bf58ba6d6375f1",
+  "assets": {
+    "directory": ".svelte-kit/cloudflare",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "routes": [
+    { "pattern": "grace.mere.run", "custom_domain": true }
+  ]
+}
