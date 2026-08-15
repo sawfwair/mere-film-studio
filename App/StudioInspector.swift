@@ -7,7 +7,7 @@ struct StudioInspector: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
                 if studio.section == .shots, let shot = selectedShot {
                     ShotInspector(snapshot: snapshot, shot: shot)
                 } else {
@@ -16,7 +16,6 @@ struct StudioInspector: View {
             }
             .padding(16)
         }
-        .background(.black.opacity(0.14))
     }
 
     private var selectedShot: FilmProductionShot? {
@@ -24,12 +23,14 @@ struct StudioInspector: View {
         return snapshot.productionPlan?.shots.first { $0.id == id }
     }
 }
+
 private struct ProjectInspector: View {
     let snapshot: FilmWorkspaceSnapshot
 
     var body: some View {
         Group {
-            Text("PROJECT BRIEF").studioEyebrow()
+            Text("Brief")
+                .panelTitle()
             InspectorField(label: "Audience", value: snapshot.project.brief.audience)
             InspectorField(label: "Genre", value: snapshot.project.brief.genre)
             InspectorField(label: "Tone", value: snapshot.project.brief.tone)
@@ -38,7 +39,8 @@ private struct ProjectInspector: View {
             InspectorField(label: "Platform", value: snapshot.project.brief.platform)
 
             Divider().opacity(0.4)
-            Text("MODELS").studioEyebrow()
+            Text("Models")
+                .panelTitle()
             ModelField(label: "Image master", value: snapshot.project.production.models.imageMaster)
             ModelField(label: "Shot image", value: snapshot.project.production.models.imageShot)
             ModelField(label: "Video", value: snapshot.project.production.models.video)
@@ -57,37 +59,31 @@ private struct ShotInspector: View {
 
     var body: some View {
         Group {
-            Text("SHOT \(shot.id.uppercased())").studioEyebrow()
+            Text(StudioText.humanize(shot.id))
+                .panelTitle()
             ArtifactImage(url: keyframe)
                 .frame(height: 160)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: Studio.radiusMedium, style: .continuous))
 
             InspectorField(label: "Purpose", value: shot.purpose)
-            InspectorField(label: "Duration", value: String(format: "%.1f seconds", shot.durationSeconds))
-            InspectorField(label: "Location", value: shot.location)
-            InspectorField(label: "Characters", value: shot.characters.joined(separator: ", "))
-            InspectorField(label: "Transition", value: shot.transition)
+            InspectorField(label: "Duration", value: Studio.timecode(shot.durationSeconds))
+            InspectorField(label: "Location", value: StudioText.humanize(shot.location))
+            InspectorField(label: "Characters", value: shot.characters.map(StudioText.humanize).joined(separator: ", "))
+            InspectorField(label: "Transition", value: StudioText.humanize(shot.transition))
             InspectorField(label: "Take", value: "\(shot.take)")
 
             Divider().opacity(0.4)
-            Text("MOTION PROMPT").studioEyebrow()
-            Text(shot.prompt).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+            Text("Motion prompt")
+                .panelTitle()
+            Text(shot.prompt)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
 
             Divider().opacity(0.4)
-            Text("TARGETED REROLL").studioEyebrow()
-            TextEditor(text: $rerollNote)
-                .scrollContentBackground(.hidden)
-                .frame(height: 84)
-                .padding(8)
-                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 9))
-                .overlay(alignment: .topLeading) {
-                    if rerollNote.isEmpty {
-                        Text("What should change?")
-                            .foregroundStyle(.tertiary)
-                            .padding(13)
-                            .allowsHitTesting(false)
-                    }
-                }
+            Text("Targeted reroll")
+                .panelTitle()
+            StudioTextEditor(placeholder: "What should change?", text: $rerollNote, font: .callout, minHeight: 84)
             Button("Prepare reroll") { studio.reroll(shotID: shot.id, note: rerollNote) }
                 .buttonStyle(StudioSecondaryButtonStyle())
                 .disabled(rerollNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || studio.isBusy)
@@ -104,9 +100,11 @@ private struct ShotInspector: View {
 private struct InspectorField: View {
     let label: String
     let value: String?
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label.uppercased()).font(.system(size: 9, weight: .bold, design: .rounded)).tracking(1).foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .fieldLabel()
             Text(value?.isEmpty == false ? value! : "Not set")
                 .font(.callout)
                 .foregroundStyle(value?.isEmpty == false ? .primary : .tertiary)
@@ -118,13 +116,17 @@ private struct InspectorField: View {
 private struct ModelField: View {
     let label: String
     let value: String
+
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Spacer()
             Text(value.isEmpty ? "auto" : value)
                 .font(.system(size: 10, design: .monospaced))
                 .lineLimit(1)
+                .truncationMode(.middle)
                 .help(value)
         }
     }
