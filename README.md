@@ -141,6 +141,6 @@ scripts/                  check, bootstrap, package
 ---
 
 <p align="center">
-  Built in 24 hours for the <em>Build an AI Agent</em> hackathon.<br>
+  Built in 24 hours at the <a href="https://locarius.io/events/4560/pei-tech-week-hackathon-with-upei">PEI Tech Week Hackathon with UPEI</a> — The Foundry, Charlottetown.<br>
   <code>mere.run</code> · <code>pi</code> · <code>qwen3.8</code> · <code>swiftui</code> · <code>ghostty</code> · <code>animatic</code>
 </p>
