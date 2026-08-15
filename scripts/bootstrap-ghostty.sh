@@ -61,8 +61,19 @@ echo "Building GhosttyKit $version ($commit) with Zig $actual_zig..."
   --search-prefix "$checkout" \
   --build-file "$checkout/build.zig"
 
-built="$checkout/zig-out/GhosttyKit.xcframework"
-if [[ ! -f "$built/Info.plist" ]]; then
+# The emit location has moved between Ghostty revisions (zig-out/ vs the
+# macos/ source tree), so locate it instead of assuming.
+built=""
+for candidate in "$checkout/zig-out/GhosttyKit.xcframework" "$checkout/macos/GhosttyKit.xcframework"; do
+  if [[ -f "$candidate/Info.plist" ]]; then
+    built="$candidate"
+    break
+  fi
+done
+if [[ -z "$built" ]]; then
+  built=$(find "$checkout" -maxdepth 3 -type d -name GhosttyKit.xcframework 2>/dev/null | head -n 1)
+fi
+if [[ -z "$built" || ! -f "$built/Info.plist" ]]; then
   echo "Ghostty build did not produce GhosttyKit.xcframework." >&2
   exit 1
 fi
