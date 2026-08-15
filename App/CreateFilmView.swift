@@ -6,93 +6,92 @@ struct CreateFilmView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var idea = ""
     @State private var title = ""
-    @State private var duration = 45.0
+    @State private var duration = 45
     @State private var parentDirectory = URL(fileURLWithPath: NSHomeDirectory()).appending(path: "Movies/Mere Films")
 
+    private static let durations = [15, 30, 45, 60, 90, 120]
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 22) {
             HStack {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Start with the spark")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("New film")
                         .font(.largeTitle.bold())
-                    Text("Pi will develop the rest with you.")
+                    Text("Give Pi the spark. You approve everything after.")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Image(systemName: "sparkles.rectangle.stack.fill")
-                    .font(.system(size: 42))
-                    .foregroundStyle(StudioPalette.amber)
+                Image(systemName: "camera.aperture")
+                    .font(.system(size: 38, weight: .light))
+                    .foregroundStyle(Studio.accent)
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("THE IDEA").studioEyebrow()
-                TextEditor(text: $idea)
-                    .font(.title3)
-                    .scrollContentBackground(.hidden)
-                    .padding(12)
-                    .frame(height: 132)
-                    .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 14))
-                    .overlay {
-                        if idea.isEmpty {
-                            Text("A lighthouse keeper receives a signal from a ship that vanished thirty years ago…")
-                                .foregroundStyle(.tertiary)
-                                .padding(18)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                                .allowsHitTesting(false)
-                        }
-                    }
+                Text("Idea").fieldLabel()
+                StudioTextEditor(
+                    placeholder: "A lighthouse keeper receives a signal from a ship that vanished thirty years ago…",
+                    text: $idea,
+                    font: .title3,
+                    minHeight: 124
+                )
             }
 
-            HStack(spacing: 16) {
+            HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("WORKING TITLE").studioEyebrow()
+                    Text("Working title").fieldLabel()
                     TextField("Untitled film", text: $title)
                         .textFieldStyle(.roundedBorder)
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("TARGET LENGTH").studioEyebrow()
-                    HStack {
-                        Slider(value: $duration, in: 10...180, step: 5)
-                        Text("\(Int(duration)) sec")
-                            .monospacedDigit()
-                            .frame(width: 62)
+                    Text("Target length").fieldLabel()
+                    Picker("Target length", selection: $duration) {
+                        ForEach(Self.durations, id: \.self) { seconds in
+                            Text(Studio.runtime(seconds)).tag(seconds)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
                 }
+                .frame(width: 280)
             }
 
             HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("PROJECTS FOLDER").studioEyebrow()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Location").fieldLabel()
                     Text(parentDirectory.path)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .truncationMode(.middle)
                 }
                 Spacer()
                 Button("Choose…") { chooseDirectory() }
+                    .buttonStyle(StudioSecondaryButtonStyle())
             }
 
             Divider()
 
             HStack {
-                Button("Cancel") { dismiss() }
+                Button("Cancel", role: .cancel) { dismiss() }
                     .buttonStyle(StudioSecondaryButtonStyle())
+                    .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button {
                     studio.createFilm(
                         idea: idea.trimmingCharacters(in: .whitespacesAndNewlines),
                         title: effectiveTitle,
-                        duration: Int(duration),
+                        duration: duration,
                         parentDirectory: projectDirectory
                     )
                 } label: {
-                    Label("Open the writers’ room", systemImage: "arrow.right")
+                    Label("Create film", systemImage: "arrow.right")
                 }
                 .buttonStyle(StudioPrimaryButtonStyle())
+                .keyboardShortcut(.defaultAction)
                 .disabled(idea.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || studio.isBusy)
             }
         }
-        .padding(30)
+        .padding(28)
         .frame(width: 680)
         .background(StudioBackdrop())
     }

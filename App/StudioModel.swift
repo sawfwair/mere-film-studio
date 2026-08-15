@@ -26,7 +26,7 @@ enum StudioSection: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .overview: "sparkles.rectangle.stack"
+        case .overview: "square.grid.2x2"
         case .story: "text.book.closed"
         case .shots: "rectangle.stack.badge.play"
         case .sound: "waveform"
@@ -73,6 +73,12 @@ final class StudioModel: ObservableObject {
             UserDefaults.standard.set(mereRunExecutable, forKey: "mereRunExecutable")
             preparePiRoom()
         }
+    }
+
+    var pendingGate: String? {
+        guard let approvals = snapshot?.project.approvals else { return nil }
+        return ["brief", "treatment", "production", "picture-lock", "delivery"]
+            .first { approvals[$0]?.status == "pending" }
     }
 
     private var watcher: FilmWorkspaceWatcher?
