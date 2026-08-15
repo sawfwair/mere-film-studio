@@ -13,7 +13,6 @@ struct MereFilmStudioApp: App {
                 .preferredColorScheme(.dark)
         }
         .defaultSize(width: 1_520, height: 940)
-        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Film…") { studio.showCreateFilm = true }
@@ -24,7 +23,16 @@ struct MereFilmStudioApp: App {
             CommandMenu("Production") {
                 Button("Refresh Project") { studio.refresh() }
                     .keyboardShortcut("r")
+                Button("Approve Current Gate") {
+                    if let gate = studio.pendingGate { studio.approve(gate: gate) }
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(studio.pendingGate == nil || studio.isBusy)
                 Button("Advance to Next Gate") { studio.advance() }
+                    .keyboardShortcut(.return, modifiers: [.command, .shift])
+                    .disabled(studio.snapshot == nil || studio.isBusy)
+                Button("Run Studio Review") { studio.review() }
+                    .keyboardShortcut("r", modifiers: [.command, .shift])
                     .disabled(studio.snapshot == nil || studio.isBusy)
                 Divider()
                 Button("Verify Animatic Handoff") { studio.validateAnimaticHandoff() }
@@ -36,6 +44,17 @@ struct MereFilmStudioApp: App {
                     studio.terminalVisible.toggle()
                 }
                 .keyboardShortcut("j", modifiers: [.command, .shift])
+                Button(studio.inspectorVisible ? "Hide Inspector" : "Show Inspector") {
+                    studio.inspectorVisible.toggle()
+                }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+            }
+            CommandMenu("Go") {
+                ForEach(Array(StudioSection.allCases.enumerated()), id: \.element) { index, section in
+                    Button(section.label) { studio.section = section }
+                        .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                        .disabled(studio.snapshot == nil)
+                }
             }
         }
 
@@ -43,5 +62,6 @@ struct MereFilmStudioApp: App {
             StudioSettingsView()
                 .environmentObject(studio)
         }
+        .windowResizability(.contentSize)
     }
 }

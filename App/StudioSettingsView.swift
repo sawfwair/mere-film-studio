@@ -1,3 +1,4 @@
+import AppKit
 import FilmStudioCore
 import GhosttyBridge
 import SwiftUI
@@ -8,10 +9,10 @@ struct StudioSettingsView: View {
     var body: some View {
         Form {
             Section("Local tools") {
-                TextField("mere-film-tools", text: $studio.filmToolExecutable)
-                TextField("branch-built mere.run", text: $studio.mereRunExecutable)
-                TextField("Pi", text: $studio.piExecutable)
-                TextField("animatic", text: $studio.animaticExecutable)
+                ExecutableField(label: "Film tools", text: $studio.filmToolExecutable)
+                ExecutableField(label: "mere.run", text: $studio.mereRunExecutable)
+                ExecutableField(label: "Pi", text: $studio.piExecutable)
+                ExecutableField(label: "Animatic", text: $studio.animaticExecutable)
                 ToolStatusRow(label: "Film tools", executable: studio.filmToolExecutable)
                 ToolStatusRow(label: "mere.run provider", executable: studio.mereRunExecutable)
                 PiStatusRow(executable: studio.piExecutable)
@@ -23,10 +24,10 @@ struct StudioSettingsView: View {
                     switch GhosttyBridge.availability {
                     case .available(let version):
                         Label("Ghostty \(version)", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(StudioPalette.mint)
+                            .foregroundStyle(Studio.pass)
                     case .unavailable(let reason):
                         Label(reason, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(StudioPalette.rose)
+                            .foregroundStyle(Studio.fail)
                     }
                 }
                 Text("Provider credentials remain inside Pi and are never read or stored by Mere Film Studio.")
@@ -35,8 +36,34 @@ struct StudioSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
-        .frame(width: 720, height: 540)
+        .frame(width: 640)
+    }
+}
+
+private struct ExecutableField: View {
+    let label: String
+    @Binding var text: String
+
+    var body: some View {
+        LabeledContent(label) {
+            HStack(spacing: 8) {
+                TextField(label, text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .labelsHidden()
+                Button("Choose…") { choose() }
+            }
+        }
+    }
+
+    private func choose() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.treatsFilePackagesAsDirectories = true
+        if panel.runModal() == .OK, let url = panel.url {
+            text = url.path
+        }
     }
 }
 
@@ -47,12 +74,12 @@ private struct PiStatusRow: View {
         LabeledContent("Pi agent") {
             if let resolved = try? PiExecutableResolver.resolve(executable) {
                 Label(resolved.path, systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(StudioPalette.mint)
+                    .foregroundStyle(Studio.pass)
                     .lineLimit(1)
                     .truncationMode(.middle)
             } else {
                 Label("Not found", systemImage: "xmark.circle.fill")
-                    .foregroundStyle(StudioPalette.rose)
+                    .foregroundStyle(Studio.fail)
             }
         }
     }
@@ -66,12 +93,12 @@ private struct ToolStatusRow: View {
         LabeledContent(label) {
             if let resolved = try? FilmToolClient.resolveExecutable(executable) {
                 Label(resolved.path, systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(StudioPalette.mint)
+                    .foregroundStyle(Studio.pass)
                     .lineLimit(1)
                     .truncationMode(.middle)
             } else {
                 Label("Not found", systemImage: "xmark.circle.fill")
-                    .foregroundStyle(StudioPalette.rose)
+                    .foregroundStyle(Studio.fail)
             }
         }
     }

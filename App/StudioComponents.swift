@@ -1,148 +1,157 @@
+import AVFoundation
+import AppKit
 import FilmStudioCore
 import SwiftUI
 
-enum StudioPalette {
-    static let amber = Color(red: 0.91, green: 0.66, blue: 0.29)
-    static let rose = Color(red: 1.0, green: 0.39, blue: 0.48)
-    static let violet = Color(red: 0.57, green: 0.42, blue: 0.96)
-    static let mint = Color(red: 0.34, green: 0.86, blue: 0.67)
-    static let cyan = Color(red: 0.31, green: 0.78, blue: 0.91)
-}
+// MARK: - Status badge
 
-extension View {
-    func studioPanel() -> some View {
-        padding(18)
-            .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    .strokeBorder(.white.opacity(0.07))
-            }
-    }
-
-    func studioEyebrow() -> some View {
-        font(.system(size: 10, weight: .bold, design: .rounded))
-            .tracking(1.5)
-            .foregroundStyle(.secondary)
-    }
-}
-
-struct StudioPrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(.body, design: .rounded, weight: .semibold))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .foregroundStyle(.black)
-            .background(
-                LinearGradient(colors: [StudioPalette.amber, Color(red: 0.98, green: 0.48, blue: 0.31)], startPoint: .leading, endPoint: .trailing),
-                in: RoundedRectangle(cornerRadius: 10)
-            )
-            .opacity(configuration.isPressed ? 0.76 : 1)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-    }
-}
-
-struct StudioSecondaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(.body, design: .rounded, weight: .semibold))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .background(.white.opacity(configuration.isPressed ? 0.12 : 0.07), in: RoundedRectangle(cornerRadius: 10))
-            .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(.white.opacity(0.10)) }
-    }
-}
-
-struct StatusCapsule: View {
+struct StatusBadge: View {
     let status: String
+
     var body: some View {
-        Text(status.replacingOccurrences(of: "-", with: " ").uppercased())
-            .font(.system(size: 9, weight: .bold, design: .rounded))
-            .tracking(0.9)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(color.opacity(0.16), in: Capsule())
-            .foregroundStyle(color)
+        HStack(spacing: 6) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text(StudioText.status(status))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(Studio.raised, in: Capsule())
+        .overlay { Capsule().strokeBorder(Studio.stroke) }
     }
 
     private var color: Color {
         switch status {
-        case "completed": StudioPalette.mint
-        case "running": StudioPalette.cyan
-        case "failed", "revision-required": StudioPalette.rose
-        default: StudioPalette.amber
+        case "completed", "succeeded", "accepted", "approved": Studio.pass
+        case "running", "ready": Studio.accent
+        case "failed", "revision-required": Studio.fail
+        default: .secondary
         }
     }
 }
 
+// MARK: - Gate rail
+
 struct GateRail: View {
     let approvals: [String: FilmApproval]
-    private let gates = ["brief", "treatment", "production", "picture-lock", "delivery"]
+
+    static let gates = ["brief", "treatment", "production", "picture-lock", "delivery"]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("HUMAN GATES").studioEyebrow()
-            ForEach(Array(gates.enumerated()), id: \.offset) { _, gate in
-                HStack(spacing: 10) {
-                    ZStack {
-                        Circle().fill(color(gate).opacity(0.16))
-                        Image(systemName: symbol(gate)).font(.caption2.bold()).foregroundStyle(color(gate))
-                    }
-                    .frame(width: 27, height: 27)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(gate.replacingOccurrences(of: "-", with: " ").capitalized).font(.caption.bold())
-                        Text(approvals[gate]?.status.uppercased() ?? "BLOCKED")
-                            .font(.system(size: 8, weight: .bold, design: .rounded))
-                            .tracking(0.7)
-                            .foregroundStyle(.tertiary)
-                    }
-                    Spacer()
-                }
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(Self.gates, id: \.self) { gate in
+                GateRow(name: StudioText.gateName(gate), status: approvals[gate]?.status)
             }
         }
+        .animation(.spring(duration: 0.45), value: statuses)
     }
 
-    private func color(_ gate: String) -> Color {
-        switch approvals[gate]?.status {
-        case "approved": StudioPalette.mint
-        case "pending": StudioPalette.amber
-        default: .secondary
+    private var statuses: [String?] {
+        Self.gates.map { approvals[$0]?.status }
+    }
+}
+
+private struct GateRow: View {
+    let name: String
+    let status: String?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle().fill(tint.opacity(status == nil ? 0.10 : 0.16))
+                Image(systemName: symbol)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .frame(width: 24, height: 24)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name)
+                    .font(.caption.weight(.semibold))
+                Text(statusLabel)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 3)
+    }
+
+    private var statusLabel: String {
+        switch status {
+        case "approved": "Approved"
+        case "pending": "Awaiting you"
+        default: "Upcoming"
         }
     }
 
-    private func symbol(_ gate: String) -> String {
-        switch approvals[gate]?.status {
+    private var symbol: String {
+        switch status {
         case "approved": "checkmark"
         case "pending": "hand.raised.fill"
         default: "lock.fill"
         }
     }
-}
 
-struct ProofDial: View {
-    let proof: FilmProof
-    var body: some View {
-        ZStack {
-            Circle().stroke(.white.opacity(0.07), lineWidth: 9)
-            Circle()
-                .trim(from: 0, to: Double(proof.completedCount) / 10)
-                .stroke(
-                    AngularGradient(colors: [StudioPalette.amber, StudioPalette.rose, StudioPalette.violet, StudioPalette.amber], center: .center),
-                    style: StrokeStyle(lineWidth: 9, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-            VStack(spacing: 0) {
-                Text("\(proof.completedCount)").font(.system(size: 30, weight: .bold, design: .rounded))
-                Text("OF 10").studioEyebrow()
-            }
+    private var tint: Color {
+        switch status {
+        case "approved": Studio.pass
+        case "pending": Studio.accent
+        default: .secondary
         }
-        .frame(width: 112, height: 112)
     }
 }
 
+// MARK: - Proof dial
+
+struct ProofDial: View {
+    let completed: Int
+    let total: Int
+
+    init(proof: FilmProof) {
+        completed = proof.completedCount
+        total = ProofChecklist.rows(proof).count
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.07), lineWidth: 7)
+            Circle()
+                .trim(from: 0, to: total == 0 ? 0 : Double(completed) / Double(total))
+                .stroke(
+                    isComplete ? Studio.pass : Studio.accent,
+                    style: StrokeStyle(lineWidth: 7, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+            VStack(spacing: 2) {
+                Text("\(completed)")
+                    .font(.system(size: 28, weight: .semibold))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                Text("of \(total)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(width: 104, height: 104)
+        .animation(.spring(duration: 0.7), value: completed)
+    }
+
+    private var isComplete: Bool {
+        total > 0 && completed >= total
+    }
+}
+
+// MARK: - Proof checklist
+
 struct ProofChecklist: View {
     let proof: FilmProof
-    private var rows: [(String, Bool, String)] {
+
+    static func rows(_ proof: FilmProof) -> [(title: String, proved: Bool, symbol: String)] {
         [
             ("Creation canon", proof.creation, "person.crop.rectangle.stack"),
             ("Selected clips", proof.clips, "film.stack"),
@@ -156,59 +165,184 @@ struct ProofChecklist: View {
             ("Delivery manifest", proof.delivery, "shippingbox"),
         ]
     }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            Text("PROOF STACK").studioEyebrow()
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                HStack {
-                    Image(systemName: row.1 ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(row.1 ? StudioPalette.mint : Color.secondary.opacity(0.5))
-                    Label(row.0, systemImage: row.2)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Proof")
+                .panelTitle()
+            ForEach(Self.rows(proof), id: \.title) { row in
+                HStack(spacing: 10) {
+                    Image(systemName: row.proved ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(row.proved ? Studio.pass : Color.secondary.opacity(0.4))
+                        .contentTransition(.symbolEffect(.replace))
+                    Label(row.title, systemImage: row.symbol)
                         .font(.callout)
                     Spacer()
-                    Text(row.1 ? "PROVED" : "PENDING").studioEyebrow()
+                    Text(row.proved ? "Proved" : "Pending")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(row.proved ? AnyShapeStyle(Studio.pass) : AnyShapeStyle(.tertiary))
                 }
             }
         }
+        .animation(.spring(duration: 0.4), value: proof)
         .studioPanel()
     }
 }
+
+// MARK: - Metric card
 
 struct MetricCard: View {
     let label: String
     let value: String
     let detail: String
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label.uppercased()).studioEyebrow()
-            Text(value).font(.system(size: 29, weight: .bold, design: .rounded)).monospacedDigit()
-            Text(detail).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .panelTitle()
+            Text(value)
+                .font(.system(size: 27, weight: .semibold))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.spring(duration: 0.5), value: value)
         .studioPanel()
+    }
+}
+
+// MARK: - Artifact images
+
+/// Off-main decode with downsampling and an in-memory cache, so keyframe
+/// grids scroll without hitching on full-resolution renders.
+enum ArtifactImageLoader {
+    @MainActor private static let cache = NSCache<NSURL, NSImage>()
+
+    private struct DecodedImage: @unchecked Sendable {
+        let image: NSImage?
+    }
+
+    @MainActor
+    static func load(_ url: URL, maxPixels: Int = 1_000) async -> NSImage? {
+        if let hit = cache.object(forKey: url as NSURL) { return hit }
+        let decoded = await Task.detached(priority: .utility) {
+            DecodedImage(image: decode(url, maxPixels: maxPixels))
+        }.value
+        if let image = decoded.image {
+            cache.setObject(image, forKey: url as NSURL)
+        }
+        return decoded.image
+    }
+
+    private static func decode(_ url: URL, maxPixels: Int) -> NSImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixels,
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return NSImage(cgImage: cgImage, size: .zero)
     }
 }
 
 struct ArtifactImage: View {
     let url: URL?
+    @State private var image: NSImage?
+
     var body: some View {
-        Group {
-            if let url, let image = NSImage(contentsOf: url) {
-                Image(nsImage: image).resizable().scaledToFill()
-            } else {
-                ZStack {
-                    LinearGradient(colors: [StudioPalette.violet.opacity(0.18), .black.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    Image(systemName: "photo.on.rectangle.angled").font(.largeTitle).foregroundStyle(.tertiary)
+        Rectangle()
+            .fill(Color.white.opacity(0.03))
+            .overlay {
+                if let image {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .transition(.opacity)
+                } else {
+                    Image(systemName: "photo")
+                        .font(.title2)
+                        .foregroundStyle(.quaternary)
                 }
             }
+            .clipped()
+            .animation(.easeOut(duration: 0.22), value: image != nil)
+        .task(id: url) {
+            guard let url else {
+                image = nil
+                return
+            }
+            image = await ArtifactImageLoader.load(url)
         }
     }
 }
+
+// MARK: - Looping clip preview
+
+/// Muted, looping playback for hover previews on shot cards.
+struct LoopingClipView: NSViewRepresentable {
+    let url: URL
+
+    func makeNSView(context: Context) -> LoopingClipNSView {
+        LoopingClipNSView(url: url)
+    }
+
+    func updateNSView(_ view: LoopingClipNSView, context: Context) {
+        view.update(url: url)
+    }
+}
+
+final class LoopingClipNSView: NSView {
+    private let playerLayer = AVPlayerLayer()
+    private var player: AVQueuePlayer?
+    private var looper: AVPlayerLooper?
+    private var currentURL: URL?
+
+    init(url: URL) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        playerLayer.videoGravity = .resizeAspectFill
+        layer?.addSublayer(playerLayer)
+        update(url: url)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        playerLayer.frame = bounds
+        CATransaction.commit()
+    }
+
+    func update(url: URL) {
+        guard url != currentURL else { return }
+        currentURL = url
+        let queue = AVQueuePlayer()
+        queue.isMuted = true
+        looper = AVPlayerLooper(player: queue, templateItem: AVPlayerItem(url: url))
+        player = queue
+        playerLayer.player = queue
+        queue.play()
+    }
+}
+
+// MARK: - Empty state
 
 struct EmptyStage: View {
     let title: String
     let detail: String
     let symbol: String
+
     var body: some View {
         ContentUnavailableView {
             Label(title, systemImage: symbol)
@@ -216,5 +350,41 @@ struct EmptyStage: View {
             Text(detail)
         }
         .frame(maxWidth: .infinity, minHeight: 380)
+    }
+}
+
+// MARK: - Text editor with placeholder
+
+struct StudioTextEditor: View {
+    let placeholder: String
+    @Binding var text: String
+    var font: Font = .body
+    var minHeight: CGFloat = 96
+
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextEditor(text: $text)
+            .font(font)
+            .scrollContentBackground(.hidden)
+            .padding(10)
+            .frame(minHeight: minHeight)
+            .background(Studio.raised, in: RoundedRectangle(cornerRadius: Studio.radiusMedium, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Studio.radiusMedium, style: .continuous)
+                    .strokeBorder(focused ? Studio.accent.opacity(0.55) : Studio.stroke)
+            }
+            .overlay(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(placeholder)
+                        .font(font)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 15)
+                        .padding(.vertical, 10)
+                        .allowsHitTesting(false)
+                }
+            }
+            .focused($focused)
+            .animation(.easeOut(duration: 0.15), value: focused)
     }
 }

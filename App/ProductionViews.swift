@@ -10,9 +10,11 @@ struct DevelopmentView: View {
             VStack(alignment: .leading, spacing: 20) {
                 if let treatment = snapshot.treatment {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("THE TREATMENT").studioEyebrow()
+                        Text("Treatment")
+                            .panelTitle()
                         Text(treatment.logline)
-                            .font(.system(size: 27, weight: .semibold, design: .rounded))
+                            .font(.system(size: 24, weight: .semibold))
+                            .tracking(-0.2)
                         Text(treatment.synopsis)
                             .font(.body)
                             .foregroundStyle(.secondary)
@@ -27,22 +29,29 @@ struct DevelopmentView: View {
                     .studioPanel()
 
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("STORY BEATS").studioEyebrow()
+                        Text("Story beats")
+                            .panelTitle()
                         ForEach(Array(treatment.beats.enumerated()), id: \.offset) { index, beat in
                             HStack(alignment: .top, spacing: 14) {
                                 Text(String(format: "%02d", index + 1))
-                                    .font(.system(.caption, design: .monospaced, weight: .bold))
-                                    .foregroundStyle(StudioPalette.amber)
+                                    .timecodeStyle()
+                                    .foregroundStyle(Studio.accent)
                                 Text(beat)
                                     .font(.body)
                                 Spacer()
                             }
-                            if index < treatment.beats.count - 1 { Divider().opacity(0.25) }
+                            if index < treatment.beats.count - 1 {
+                                Divider().opacity(0.25)
+                            }
                         }
                     }
                     .studioPanel()
                 } else {
-                    EmptyStage(title: "Treatment is taking shape", detail: "Work with Pi in the room below, then approve the brief to unleash the development departments.", symbol: "text.book.closed")
+                    EmptyStage(
+                        title: "No treatment yet",
+                        detail: "Develop the idea with Pi in the room below. Approving the brief starts development.",
+                        symbol: "text.book.closed"
+                    )
                 }
 
                 if let plan = snapshot.productionPlan {
@@ -60,12 +69,13 @@ private struct CanonGrid: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("CONTINUITY CANON").studioEyebrow()
+            Text("Continuity canon")
+                .panelTitle()
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 14)], spacing: 14) {
                 ForEach(plan.cast) { member in
                     CanonCard(
                         image: artifactURL(kind: "cast-master", suffix: "/\(member.id).png"),
-                        eyebrow: "CAST",
+                        category: "Cast",
                         title: member.name,
                         detail: member.visual,
                         footnote: member.wardrobe
@@ -74,7 +84,7 @@ private struct CanonGrid: View {
                 ForEach(plan.locations) { location in
                     CanonCard(
                         image: artifactURL(kind: "location-master", suffix: "/\(location.id).png"),
-                        eyebrow: "LOCATION",
+                        category: "Location",
                         title: location.name,
                         detail: location.visual,
                         footnote: location.ambience
@@ -102,16 +112,40 @@ struct ShotBoardView: View {
                             index: index,
                             shot: shot,
                             keyframe: keyframe(for: shot.id),
-                            clipExists: clip(for: shot.id) != nil,
+                            clip: clip(for: shot.id),
                             selected: studio.selectedShotID == shot.id
-                        )
-                        .onTapGesture { studio.selectedShotID = shot.id }
+                        ) {
+                            studio.selectedShotID = shot.id
+                        }
+                        .contextMenu {
+                            if let clip = clip(for: shot.id) {
+                                Button("Open clip") { NSWorkspace.shared.open(clip) }
+                            }
+                            if let keyframe = keyframe(for: shot.id) {
+                                Button("Show keyframe in Finder") {
+                                    NSWorkspace.shared.activateFileViewerSelecting([keyframe])
+                                }
+                            }
+                            Button("Copy motion prompt") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(shot.prompt, forType: .string)
+                            }
+                            Divider()
+                            Button("Reroll…") {
+                                studio.selectedShotID = shot.id
+                                studio.inspectorVisible = true
+                            }
+                        }
                     }
                 }
                 .padding(24)
             }
         } else {
-            EmptyStage(title: "No shot plan yet", detail: "Approve the treatment and let the preproduction departments block the film.", symbol: "rectangle.stack")
+            EmptyStage(
+                title: "No shot plan yet",
+                detail: "Approve the treatment and preproduction will block the film shot by shot.",
+                symbol: "rectangle.stack"
+            )
         }
     }
 
@@ -132,55 +166,90 @@ private struct ShotCard: View {
     let index: Int
     let shot: FilmProductionShot
     let keyframe: URL?
-    let clipExists: Bool
+    let clip: URL?
     let selected: Bool
+    let select: () -> Void
+
+    @State private var hovering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topLeading) {
-                ArtifactImage(url: keyframe)
-                    .frame(height: 174)
-                    .clipped()
-                HStack {
-                    Text(String(format: "SHOT %02d", index + 1))
-                    Spacer()
-                    Label(clipExists ? "CLIP" : "FRAME", systemImage: clipExists ? "play.fill" : "photo")
-                }
-                .font(.system(size: 9, weight: .bold, design: .rounded))
-                .tracking(1.2)
-                .padding(10)
-                .background(.black.opacity(0.58))
+        Button(action: select) {
+            VStack(alignment: .leading, spacing: 0) {
+                slate
+                details
             }
-
-            VStack(alignment: .leading, spacing: 9) {
-                HStack {
-                    Text(shot.id.replacingOccurrences(of: "-", with: " ").capitalized)
-                        .font(.headline)
-                    Spacer()
-                    Text(String(format: "%.1fs", shot.durationSeconds))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-                Text(shot.purpose)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                HStack {
-                    Label("Take \(shot.take)", systemImage: "film.stack")
-                    Spacer()
-                    Label(shot.transition.capitalized, systemImage: "arrow.right")
-                }
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-            }
-            .padding(13)
         }
-        .background(.white.opacity(selected ? 0.095 : 0.05), in: RoundedRectangle(cornerRadius: 15))
+        .buttonStyle(.plain)
+        .background(Color.white.opacity(selected ? 0.09 : 0.05), in: RoundedRectangle(cornerRadius: Studio.radiusLarge, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 15)
-                .strokeBorder(selected ? StudioPalette.amber : .white.opacity(0.07), lineWidth: selected ? 1.5 : 1)
+            RoundedRectangle(cornerRadius: Studio.radiusLarge, style: .continuous)
+                .strokeBorder(
+                    selected ? Studio.accent : (hovering ? Studio.strokeStrong : Studio.stroke),
+                    lineWidth: selected ? 1.5 : 1
+                )
         }
-        .clipShape(RoundedRectangle(cornerRadius: 15))
+        .clipShape(RoundedRectangle(cornerRadius: Studio.radiusLarge, style: .continuous))
+        .studioHoverLift()
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.15), value: hovering)
+        .animation(.easeOut(duration: 0.15), value: selected)
+    }
+
+    /// Keyframe (or a looping clip preview on hover) with a slate strip in a
+    /// bottom gradient scrim.
+    private var slate: some View {
+        ZStack(alignment: .bottom) {
+            ZStack {
+                ArtifactImage(url: keyframe)
+                if hovering, let clip {
+                    LoopingClipView(url: clip)
+                        .transition(.opacity)
+                }
+            }
+            .frame(height: 174)
+            .clipped()
+
+            LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .top, endPoint: .bottom)
+                .frame(height: 56)
+
+            HStack {
+                Text(String(format: "SHOT %02d", index + 1))
+                    .timecodeStyle()
+                    .foregroundStyle(.white.opacity(0.9))
+                Spacer()
+                if clip != nil {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                Text(Studio.timecode(shot.durationSeconds))
+                    .timecodeStyle()
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 9)
+        }
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(StudioText.humanize(shot.id))
+                .font(.headline)
+                .lineLimit(1)
+            Text(shot.purpose)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Label("Take \(shot.take)", systemImage: "film.stack")
+                Spacer()
+                Label(StudioText.humanize(shot.transition), systemImage: "arrow.right")
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+        }
+        .padding(13)
     }
 }
 
@@ -192,7 +261,8 @@ struct SoundView: View {
             VStack(alignment: .leading, spacing: 20) {
                 if let plan = snapshot.productionPlan {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("SCORE DIRECTION").studioEyebrow()
+                        Text("Score")
+                            .panelTitle()
                         Label(plan.scorePrompt, systemImage: "music.note.list")
                             .font(.title3)
                         HStack(spacing: 14) {
@@ -207,12 +277,15 @@ struct SoundView: View {
                     ForEach(plan.shots.filter { !$0.dialogue.isEmpty || !$0.soundEffects.isEmpty }) { shot in
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
-                                Text(shot.id.replacingOccurrences(of: "-", with: " ").capitalized).font(.headline)
+                                Text(StudioText.humanize(shot.id))
+                                    .font(.headline)
                                 Spacer()
-                                Text(String(format: "%.1f sec", shot.durationSeconds)).monospacedDigit().foregroundStyle(.secondary)
+                                Text(Studio.timecode(shot.durationSeconds))
+                                    .timecodeStyle()
+                                    .foregroundStyle(.secondary)
                             }
                             ForEach(Array(shot.dialogue.enumerated()), id: \.offset) { _, line in
-                                CueRow(time: line.startSeconds, symbol: "quote.bubble.fill", title: line.speaker.capitalized, detail: line.text)
+                                CueRow(time: line.startSeconds, symbol: "quote.bubble.fill", title: StudioText.humanize(line.speaker), detail: line.text)
                             }
                             ForEach(Array(shot.soundEffects.enumerated()), id: \.offset) { _, cue in
                                 CueRow(time: cue.startSeconds, symbol: "waveform", title: "SFX · \(Int(cue.levelDb)) dB", detail: cue.prompt)
@@ -221,7 +294,11 @@ struct SoundView: View {
                         .studioPanel()
                     }
                 } else {
-                    EmptyStage(title: "The soundtrack starts in preproduction", detail: "Dialogue performances, authored effects, captions, and score will share one accepted timeline.", symbol: "waveform")
+                    EmptyStage(
+                        title: "No sound plan yet",
+                        detail: "Dialogue, effects, captions, and score are planned during preproduction and share one timeline.",
+                        symbol: "waveform"
+                    )
                 }
             }
             .padding(24)
@@ -239,20 +316,29 @@ struct ReviewView: View {
                 if let cut = snapshot.playableCutURL {
                     NativePlayer(url: cut)
                         .frame(minHeight: 390)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
-                        .overlay { RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.10)) }
+                        .clipShape(RoundedRectangle(cornerRadius: Studio.radiusLarge, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Studio.radiusLarge, style: .continuous)
+                                .strokeBorder(Studio.stroke)
+                        }
                 } else {
-                    EmptyStage(title: "The screening room is waiting", detail: "A playable cut appears here after production and assembly succeed.", symbol: "play.rectangle")
+                    EmptyStage(
+                        title: "No cut yet",
+                        detail: "A playable cut appears here once production and assembly succeed.",
+                        symbol: "play.rectangle"
+                    )
                 }
 
                 HStack(alignment: .top, spacing: 16) {
                     ProofChecklist(proof: snapshot.project.proof)
                         .frame(maxWidth: .infinity)
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("REVIEW ACTION").studioEyebrow()
+                        Text("Review")
+                            .panelTitle()
                         Text("Machines provide evidence. You lock the picture.")
-                            .font(.title3.bold())
-                        Text("Technical QC, local vision, and independent critics must pass before your hash-bound decision can enter the ledger.")
+                            .font(.title3.weight(.semibold))
+                        Text("Technical QC, vision inspection, and independent critics run before your approval is recorded against the cut's hash.")
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                         Button("Run studio review") { studio.review() }
                             .buttonStyle(StudioPrimaryButtonStyle())
@@ -268,14 +354,17 @@ struct ReviewView: View {
 
                 if !snapshot.project.reviewRequests.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("TARGETED REROLLS").studioEyebrow()
+                        Text("Targeted rerolls")
+                            .panelTitle()
                         ForEach(snapshot.project.reviewRequests) { request in
                             HStack(alignment: .top) {
                                 Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                                    .foregroundStyle(StudioPalette.rose)
+                                    .foregroundStyle(Studio.accent)
                                 VStack(alignment: .leading) {
-                                    Text(request.shotId).font(.headline)
-                                    Text(request.note).foregroundStyle(.secondary)
+                                    Text(StudioText.humanize(request.shotId))
+                                        .font(.headline)
+                                    Text(request.note)
+                                        .foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 Button("Prepare") { studio.reroll(shotID: request.shotId, note: request.note) }
@@ -300,11 +389,13 @@ struct DeliveryView: View {
             VStack(alignment: .leading, spacing: 20) {
                 HStack(alignment: .top, spacing: 28) {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("DELIVERY").studioEyebrow()
-                        Text(snapshot.project.proof.delivery ? "The master is ready." : "Every promise must be proved.")
-                            .font(.system(size: 34, weight: .bold, design: .rounded))
-                        Text("Delivery is bound to the accepted cut, evidence, captions, poster, thumbnail, and checksums. Any changed surface breaks the lock.")
-                            .font(.title3)
+                        Text("Delivery")
+                            .panelTitle()
+                        Text(snapshot.project.proof.delivery ? "The master is ready." : "Delivery locks when every check passes.")
+                            .font(.system(size: 28, weight: .semibold))
+                            .tracking(-0.3)
+                        Text("The package binds the accepted cut, evidence, captions, poster, thumbnail, and checksums. Changing any surface breaks the lock.")
+                            .font(.body)
                             .foregroundStyle(.secondary)
                             .lineSpacing(4)
                     }
@@ -317,12 +408,13 @@ struct DeliveryView: View {
                     ProofChecklist(proof: snapshot.project.proof)
                         .frame(maxWidth: .infinity)
 
-                    VStack(alignment: .leading, spacing: 15) {
-                        Text("CONTINUE IN ANIMATIC").studioEyebrow()
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Continue in Animatic")
+                            .panelTitle()
                         Image(systemName: "timeline.selection")
-                            .font(.system(size: 38))
-                            .foregroundStyle(StudioPalette.violet)
-                        Text("Push every selected take into an editable, versioned production timeline.")
+                            .font(.system(size: 34))
+                            .foregroundStyle(Studio.accent)
+                        Text("Push every selected take into an editable, versioned timeline.")
                             .font(.headline)
                         Text("The handoff re-verifies every source hash before Animatic receives it.")
                             .font(.callout)
@@ -343,15 +435,15 @@ struct DeliveryView: View {
                         .disabled(studio.isBusy || snapshot.productionPlan == nil)
 
                         if let validation = studio.handoffValidation, validation.ok {
-                            Label("Verified for \(validation.importedAssets ?? 0) assets", systemImage: "checkmark.shield.fill")
-                                .font(.caption.bold())
-                                .foregroundStyle(StudioPalette.mint)
+                            Label("Verified — \(validation.importedAssets ?? 0) assets", systemImage: "checkmark.shield.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Studio.pass)
                         }
 
                         if let receipt = studio.handoffReceipt {
                             Label("Imported as \(receipt.projectId)", systemImage: "checkmark.seal.fill")
-                                .font(.caption.bold())
-                                .foregroundStyle(StudioPalette.mint)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Studio.pass)
                         }
                     }
                     .frame(width: 330)
@@ -370,8 +462,12 @@ private struct LanguageCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: symbol).font(.caption.bold()).foregroundStyle(StudioPalette.amber)
-            Text(text).font(.callout).foregroundStyle(.secondary)
+            Label(title, systemImage: symbol)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Studio.accent)
+            Text(text)
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -379,26 +475,41 @@ private struct LanguageCard: View {
 
 private struct CanonCard: View {
     let image: URL?
-    let eyebrow: String
+    let category: String
     let title: String
     let detail: String
     let footnote: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ArtifactImage(url: image).frame(height: 170).clipped()
-            VStack(alignment: .leading, spacing: 7) {
-                Text(eyebrow).studioEyebrow()
-                Text(title).font(.title3.bold())
-                Text(detail).font(.callout).foregroundStyle(.secondary).lineLimit(3)
+            ArtifactImage(url: image)
+                .frame(height: 170)
+                .clipped()
+            VStack(alignment: .leading, spacing: 6) {
+                Text(category)
+                    .fieldLabel()
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
                 if !footnote.isEmpty {
-                    Text(footnote).font(.caption).foregroundStyle(.tertiary).lineLimit(2)
+                    Text(footnote)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(2)
                 }
             }
             .padding(13)
         }
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 15))
-        .clipShape(RoundedRectangle(cornerRadius: 15))
+        .background(Studio.raised, in: RoundedRectangle(cornerRadius: Studio.radiusLarge, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Studio.radiusLarge, style: .continuous)
+                .strokeBorder(Studio.stroke)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Studio.radiusLarge, style: .continuous))
+        .studioHoverLift(1.008)
     }
 }
 
@@ -406,16 +517,22 @@ private struct SoundMetric: View {
     let symbol: String
     let value: String
     let label: String
+
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: symbol).foregroundStyle(StudioPalette.amber)
+            Image(systemName: symbol)
+                .foregroundStyle(Studio.accent)
             VStack(alignment: .leading) {
-                Text(value).font(.headline).monospacedDigit()
-                Text(label).font(.caption2).foregroundStyle(.secondary)
+                Text(value)
+                    .font(.headline)
+                    .monospacedDigit()
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(11)
-        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+        .background(Studio.raised, in: RoundedRectangle(cornerRadius: Studio.radiusMedium, style: .continuous))
     }
 }
 
@@ -424,13 +541,21 @@ private struct CueRow: View {
     let symbol: String
     let title: String
     let detail: String
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Text(String(format: "%05.2f", time)).font(.system(.caption, design: .monospaced)).foregroundStyle(StudioPalette.amber)
-            Image(systemName: symbol).frame(width: 20).foregroundStyle(.secondary)
+            Text(Studio.timecode(time))
+                .timecodeStyle()
+                .foregroundStyle(Studio.accent)
+            Image(systemName: symbol)
+                .frame(width: 20)
+                .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.caption.bold())
-                Text(detail).font(.callout).foregroundStyle(.secondary)
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
         }
     }
