@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  native:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: brew install anyzig swiftlint xcodegen
+
+      - name: Restore pinned GhosttyKit
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build/dependencies/GhosttyKit.xcframework
+            Generated/GhosttyResources
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Vendor/ghostty-version.json') }}
+
+      - name: Verify native application
+        run: ./scripts/check.sh
