@@ -24,11 +24,20 @@ for command_name in git zig xcodebuild; do
   fi
 done
 
-actual_zig=$(zig version)
+# Plain zig answers `zig version`; the anyzig shim needs the version spelled
+# out because there is no build.zig at the repo root to infer it from.
+zig_cmd=(zig)
+if ! actual_zig=$(zig version 2>/dev/null); then
+  actual_zig=""
+fi
 if [[ "$actual_zig" != "$zig_version" ]]; then
-  echo "Ghostty $version requires Zig $zig_version; found $actual_zig." >&2
-  echo "Install anyzig with Homebrew to select the pinned toolchain automatically." >&2
-  exit 1
+  if actual_zig=$(zig "$zig_version" version 2>/dev/null) && [[ "$actual_zig" == "$zig_version" ]]; then
+    zig_cmd=(zig "$zig_version")
+  else
+    echo "Ghostty $version requires Zig $zig_version; found ${actual_zig:-none}." >&2
+    echo "Install anyzig with Homebrew to select the pinned toolchain automatically." >&2
+    exit 1
+  fi
 fi
 
 checkout=$(mktemp -d "${TMPDIR:-/tmp}/mere-film-ghostty.XXXXXX")
@@ -46,7 +55,7 @@ if [[ "$actual_commit" != "$commit" ]]; then
 fi
 
 echo "Building GhosttyKit $version ($commit) with Zig $actual_zig..."
-zig build -Doptimize=ReleaseFast -Demit-xcframework=true -Demit-macos-app=false \
+"${zig_cmd[@]}" build -Doptimize=ReleaseFast -Demit-xcframework=true -Demit-macos-app=false \
   --prefix "$checkout/zig-out" \
   --summary all \
   --search-prefix "$checkout" \
