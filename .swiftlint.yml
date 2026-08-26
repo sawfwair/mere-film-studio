@@ -1,16 +1,59 @@
+# Lint rules are behavioral guardrails, not style policing: they encode the
+# architecture's intent so agents and humans cannot erode it silently.
+# Runs under --strict in scripts/check.sh — warnings fail the build.
+#
+# Intentionally disabled (stylistic only, pinned by team convention):
+#   trailing_comma, large_tuple, optional_data_string_conversion,
+#   identifier_name, inclusive_language
+# Everything behavioral is ON. Do not add behavioral rules to this list.
 disabled_rules:
-  - cyclomatic_complexity
-  - file_length
-  - function_body_length
-  - identifier_name
   - inclusive_language
+  - trailing_comma
   - large_tuple
   - optional_data_string_conversion
-  - trailing_comma
+  - identifier_name
 
+# Line length stays generous because SwiftUI chains run long.
 line_length:
   warning: 240
   error: 260
+
+# Re-enabled with tuned thresholds (were blanket-disabled).
+cyclomatic_complexity:
+  warning: 12
+  error: 20
+function_body_length:
+  warning: 60
+  error: 120
+file_length:
+  warning: 450
+  error: 700
+
+# Opt-in force rules: forced optionals are how typed code pretends errors
+# don't exist. The right path is explicit handling at the boundary.
+force_try:
+  severity: error
+force_unwrapping:
+  severity: error
+force_cast:
+  severity: error
+
+opt_in_rules:
+  - force_try
+  - force_unwrapping
+  - force_cast
+
+custom_rules:
+  artifact_kind_literal:
+    name: "Artifact kind literal"
+    regex: '[kK]ind\s*[=!]=\s*"'
+    message: "Compare against ArtifactKind cases (e.g. .shotKeyframe), never raw kind strings."
+    severity: error
+  status_literal_comparison:
+    name: "Status literal comparison"
+    regex: '(status|Status)\s*[=!]=\s*"'
+    message: "Compare against FilmContractStatus cases, never raw status strings."
+    severity: error
 
 included:
   - App

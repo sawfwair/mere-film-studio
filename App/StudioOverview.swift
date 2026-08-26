@@ -71,7 +71,7 @@ struct StudioOverview: View {
     }
 
     private var completedDepartments: Int {
-        snapshot.project.departments.filter { ["succeeded", "accepted"].contains($0.status) }.count
+        snapshot.project.departments.filter { $0.status.isSettled }.count
     }
 
     private var artifactBytes: Int64 {
@@ -88,8 +88,8 @@ private struct NextMoveCard: View {
     @EnvironmentObject private var studio: StudioModel
     let snapshot: FilmWorkspaceSnapshot
 
-    private var pendingGate: String? {
-        GateRail.gates.first { snapshot.project.approvals[$0]?.status == "pending" }
+    private var pendingGate: FilmGate? {
+        FilmGate.allCases.first { snapshot.project.approvals[$0.rawValue]?.status == .pending }
     }
 
     var body: some View {
@@ -100,7 +100,7 @@ private struct NextMoveCard: View {
                 .font(.system(size: 34))
                 .foregroundStyle(pendingGate == nil ? Studio.pass : Studio.accent)
                 .contentTransition(.symbolEffect(.replace))
-            Text(pendingGate.map { "Review the \(StudioText.gateName($0).lowercased())" } ?? "Ready to continue")
+            Text(pendingGate.map { "Review the \($0.displayName.lowercased())" } ?? "Ready to continue")
                 .font(.title3.weight(.semibold))
             Text(detail)
                 .font(.callout)
@@ -108,8 +108,8 @@ private struct NextMoveCard: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 4)
             if let gate = pendingGate {
-                Button("Approve \(StudioText.gateName(gate).lowercased())") {
-                    studio.approve(gate: gate)
+                Button("Approve \(gate.displayName.lowercased())") {
+                    studio.requestApproval(gate: gate)
                 }
                 .buttonStyle(StudioPrimaryButtonStyle())
                 .disabled(studio.isBusy)
@@ -125,7 +125,7 @@ private struct NextMoveCard: View {
     }
 
     private var detail: String {
-        if let gate = pendingGate, let summary = snapshot.project.approvals[gate]?.summary {
+        if let gate = pendingGate, let summary = snapshot.project.approvals[gate.rawValue]?.summary {
             return summary
         }
         return "Pi advances through approved work and stops at the next gate."
@@ -165,7 +165,7 @@ private struct DepartmentBoard: View {
 
 private struct DepartmentGlyph: View {
     let role: String
-    let status: String
+    let status: FilmContractStatus
 
     var body: some View {
         ZStack {
@@ -173,18 +173,16 @@ private struct DepartmentGlyph: View {
             Image(systemName: symbol)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(color)
-                .symbolEffect(.pulse, isActive: status == "running")
+                .symbolEffect(.pulse, isActive: status == .running)
         }
         .frame(width: 32, height: 32)
     }
 
     private var color: Color {
-        switch status {
-        case "accepted", "succeeded": Studio.pass
-        case "running", "ready": Studio.accent
-        case "failed": Studio.fail
-        default: .secondary
-        }
+        if status.isSettled { return Studio.pass }
+        if status.isInFlight { return Studio.accent }
+        if status.isFailed { return Studio.fail }
+        return .secondary
     }
 
     private var symbol: String {

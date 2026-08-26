@@ -1,3 +1,4 @@
+import FilmStudioCore
 import SwiftUI
 
 /// The studio design language: near-black neutral surfaces, a single amber
@@ -42,29 +43,20 @@ enum Studio {
 
 /// Every machine identifier crosses through here before it reaches the
 /// screen, so the UI never shows raw enum or slug spellings.
+/// Maps contract vocabulary to display text.
 enum StudioText {
-    static func gateName(_ gate: String) -> String {
-        switch gate {
-        case "brief": "Brief"
-        case "treatment": "Treatment"
-        case "production": "Production"
-        case "picture-lock": "Picture lock"
-        case "delivery": "Delivery"
-        default: humanize(gate)
-        }
-    }
-
-    static func status(_ raw: String?) -> String {
-        switch raw {
-        case nil, "": "Idle"
-        case "completed", "succeeded", "accepted": "Complete"
-        case "running": "Running"
-        case "ready": "Ready"
-        case "failed": "Failed"
-        case "revision-required": "Revision required"
-        case "pending": "Awaiting you"
-        case "approved": "Approved"
-        case .some(let other): humanize(other)
+    /// Human label for a contract status; `nil` means nothing is running.
+    static func status(_ status: FilmContractStatus?) -> String {
+        guard let status else { return "Idle" }
+        switch status {
+        case .completed, .succeeded, .accepted: return "Complete"
+        case .running: return "Running"
+        case .ready: return "Ready"
+        case .failed: return "Failed"
+        case .revisionRequired: return "Revision required"
+        case .pending: return "Awaiting you"
+        case .approved: return "Approved"
+        default: return humanize(status.rawValue)
         }
     }
 

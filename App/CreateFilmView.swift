@@ -81,7 +81,7 @@ struct CreateFilmView: View {
                         idea: idea.trimmingCharacters(in: .whitespacesAndNewlines),
                         title: effectiveTitle,
                         duration: duration,
-                        parentDirectory: projectDirectory
+                        parentDirectory: availableDirectory()
                     )
                 } label: {
                     Label("Create film", systemImage: "arrow.right")
@@ -101,11 +101,28 @@ struct CreateFilmView: View {
         return trimmed.isEmpty ? String(idea.split(separator: " ").prefix(6).joined(separator: " ")) : trimmed
     }
 
-    private var projectDirectory: URL {
-        let slug = effectiveTitle.lowercased()
+    private var slug: String {
+        effectiveTitle.lowercased()
             .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-        return parentDirectory.appending(path: slug.isEmpty ? "untitled-film" : slug)
+    }
+
+    private var projectDirectory: URL {
+        parentDirectory.appending(path: slug.isEmpty ? "untitled-film" : slug)
+    }
+
+    /// Never aim the tool at an existing directory: reuse would either fail or
+    /// trample a previous film, so pick the first free `slug-2`, `slug-3`…
+    private func availableDirectory() -> URL {
+        let base = projectDirectory
+        guard FileManager.default.fileExists(atPath: base.path) else { return base }
+        var index = 2
+        while FileManager.default.fileExists(
+            atPath: parentDirectory.appending(path: "\(base.lastPathComponent)-\(index)").path
+        ) {
+            index += 1
+        }
+        return parentDirectory.appending(path: "\(base.lastPathComponent)-\(index)")
     }
 
     private func chooseDirectory() {

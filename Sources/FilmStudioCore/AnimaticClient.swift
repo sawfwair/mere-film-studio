@@ -41,7 +41,9 @@ public struct AnimaticClient: Sendable {
         var arguments = ["production", "import-film", manifest.path]
         if dryRun { arguments.append("--dry-run") }
         arguments.append(contentsOf: ["--output", "json"])
-        let result = try await runner.run(arguments)
+        // Importing re-verifies every source hash on potentially large media;
+        // fifteen minutes is generous but still bounds a hang.
+        let result = try await runner.run(arguments, timeout: 900)
         do {
             return try JSONDecoder().decode(AnimaticImportReceipt.self, from: Data(result.stdout.utf8))
         } catch {

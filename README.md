@@ -96,7 +96,9 @@ Requires an Apple Silicon Mac, macOS 15+, Xcode 26+, and XcodeGen. The app is `a
 git clone https://github.com/sawfwair/mere-film-studio
 cd mere-film-studio
 brew install xcodegen
-./scripts/check.sh          # lint, tests, and a full app build
+./scripts/setup-hooks.sh    # one-time: lint + tests on every commit
+./scripts/check-fast.sh     # fast loop: lint + unit tests
+./scripts/check.sh          # full CI-parity gate (lint, tests, coverage, build)
 open MereFilmStudio.xcodeproj
 ```
 

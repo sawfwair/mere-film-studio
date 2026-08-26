@@ -5,15 +5,15 @@ options:
     macOS: "15.0"
   createIntermediateGroups: true
   groupSortPosition: top
-settings:
-  base:
-    SWIFT_VERSION: "6.0"
-    MACOSX_DEPLOYMENT_TARGET: "15.0"
-    CLANG_ENABLE_MODULES: YES
-    ARCHS: arm64
-    VALID_ARCHS: arm64
-    ENABLE_USER_SCRIPT_SANDBOXING: YES
-    SWIFT_STRICT_CONCURRENCY: targeted
+  settings:
+    base:
+      SWIFT_VERSION: "6.0"
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
+      CLANG_ENABLE_MODULES: YES
+      ARCHS: arm64
+      VALID_ARCHS: arm64
+      ENABLE_USER_SCRIPT_SANDBOXING: YES
+      SWIFT_STRICT_CONCURRENCY: targeted
 targets:
   FilmStudioCore:
     type: framework
@@ -25,6 +25,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: run.mere.filmstudio.core
         DEFINES_MODULE: YES
         GENERATE_INFOPLIST_FILE: YES
+        # The contracts module holds all shared mutable-state reasoning; hold
+        # it to the strictest concurrency checking.
+        SWIFT_STRICT_CONCURRENCY: complete
   GhosttyBridge:
     type: framework
     platform: macOS

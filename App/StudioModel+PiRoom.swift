@@ -27,7 +27,7 @@ extension StudioModel {
     var terminalEnvironment: [String: String] {
         guard let configuration = piRoomConfiguration else { return [:] }
         return configuration.launchSpec.environment.merging([
-            "MERE_FILM_TOOLS_PI_PROVIDER": "mere-run",
+            "MERE_FILM_TOOLS_PI_PROVIDER": FilmToolClient.defaultPiProvider,
             "MERE_FILM_TOOLS_PI_MODEL": configuration.model.id,
         ]) { _, override in override }
     }

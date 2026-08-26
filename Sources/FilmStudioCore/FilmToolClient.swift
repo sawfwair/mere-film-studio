@@ -1,5 +1,6 @@
 import Foundation
 
+/// The result of one completed CLI invocation, both streams captured.
 public struct ProcessResult: Sendable, Equatable {
     public let executable: String
     public let arguments: [String]
@@ -10,6 +11,7 @@ public struct ProcessResult: Sendable, Equatable {
     public var succeeded: Bool { exitCode == 0 }
 }
 
+/// Launch specification for embedding Pi as an agent inside a film run.
 public struct PiAgentLaunchSpec: Codable, Sendable, Equatable {
     public let command: [String]
     public let cwd: String
@@ -29,6 +31,7 @@ public enum FilmToolError: LocalizedError, Equatable {
     case launchFailed(String)
     case commandFailed(ProcessResult)
     case invalidJSON(String)
+    case timedOut(seconds: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -38,10 +41,23 @@ public enum FilmToolError: LocalizedError, Equatable {
             ? "Film command exited \(result.exitCode)."
             : result.stderr
         case .invalidJSON(let message): "Film command returned invalid JSON: \(message)"
+        case .timedOut(let seconds): "Film command exceeded its \(seconds)-second limit and was stopped."
         }
     }
 }
 
+/// Provider passed to mere-film-tools whenever the studio drives Pi itself.
+public extension FilmToolClient {
+    static let defaultPiProvider = "mere-run"
+}
+
+/// Typed client for the `mere-film-tools` CLI. Every method decodes stdout
+/// into contract types; stderr surfaces through `FilmToolError.commandFailed`.
+///
+/// Cancellation: all commands are task-cancellable; cancelling terminates the
+/// child process. Timeouts: auxiliary commands bound themselves; long
+/// production commands (`advance`, `review`) are intentionally unbounded —
+/// see DECISIONS.md entry 008.
 public struct FilmToolClient: Sendable {
     public let executable: String
 
@@ -49,6 +65,7 @@ public struct FilmToolClient: Sendable {
         self.executable = executable
     }
 
+    /// Creates a new film project directory and returns its run manifest.
     public func plan(
         idea: String,
         title: String,
@@ -66,25 +83,24 @@ public struct FilmToolClient: Sendable {
         if let piCommand {
             arguments.append(contentsOf: ["--pi-command", piCommand])
         }
-        let result = try await run(arguments)
+        // Planning bootstraps a whole project directory; give it room, but
+        // never hang forever.
+        let result = try await run(arguments, timeout: 1_800)
         let response: FilmPlanResponse = try decode(FilmPlanResponse.self, from: result.stdout)
         return URL(fileURLWithPath: response.status.runManifest)
     }
 
-    public func status(runManifest: URL) async throws -> FilmStatusResponse {
-        let result = try await run(["status", runManifest.path])
-        return try decode(FilmStatusResponse.self, from: result.stdout)
-    }
-
+    /// Records a human gate approval in the project ledger.
     public func approve(runManifest: URL, gate: String, note: String, approvedBy: String) async throws {
         _ = try await run([
             "approve", runManifest.path,
             "--gate", gate,
             "--note", note,
             "--approved-by", approvedBy,
-        ])
+        ], timeout: 600)
     }
 
+    /// Advances production up to the next gate. Unbounded by design.
     public func advance(
         runManifest: URL,
         piCommand: String? = nil,
@@ -95,17 +111,24 @@ public struct FilmToolClient: Sendable {
         if let piCommand {
             arguments.append(contentsOf: ["--pi-command", piCommand])
         }
-        return try await run(arguments, environment: Self.piEnvironment(provider: piProvider, model: piModel))
+        return try await run(
+            arguments,
+            environment: Self.piEnvironment(provider: piProvider, model: piModel)
+        )
     }
 
+    /// Resumes a run interrupted mid-command.
     public func recover(runManifest: URL) async throws -> ProcessResult {
-        try await run(["recover", runManifest.path])
+        try await run(["recover", runManifest.path], timeout: 600)
     }
 
+    /// Queues a targeted regeneration of one shot.
     public func reroll(runManifest: URL, shotID: String, note: String) async throws -> ProcessResult {
-        try await run(["reroll", runManifest.path, "--shot", shotID, "--note", note])
+        try await run(["reroll", runManifest.path, "--shot", shotID, "--note", note], timeout: 600)
     }
 
+    /// Runs technical QC plus independent creative review of the current cut.
+    /// Unbounded by design.
     public func review(
         runManifest: URL,
         piCommand: String? = nil,
@@ -116,16 +139,10 @@ public struct FilmToolClient: Sendable {
         if let piCommand {
             arguments.append(contentsOf: ["--pi-command", piCommand])
         }
-        return try await run(arguments, environment: Self.piEnvironment(provider: piProvider, model: piModel))
-    }
-
-    public func exportAnimatic(runManifest: URL, output: URL? = nil) async throws -> FilmAnimaticExportReceipt {
-        var arguments = ["export-animatic", runManifest.path]
-        if let output {
-            arguments.append(contentsOf: ["--output", output.path])
-        }
-        let result = try await run(arguments)
-        return try decode(FilmAnimaticExportReceipt.self, from: result.stdout)
+        return try await run(
+            arguments,
+            environment: Self.piEnvironment(provider: piProvider, model: piModel)
+        )
     }
 
     public func agentArguments(runManifest: URL, piCommand: String? = nil) -> [String] {
@@ -136,19 +153,14 @@ public struct FilmToolClient: Sendable {
         return arguments
     }
 
+    /// Asks the tools for the exact launch command that embeds this run's Pi
+    /// agent, so the terminal and headless paths execute identical machinery.
     public func agentLaunchSpec(runManifest: URL, piCommand: String) async throws -> PiAgentLaunchSpec {
-        let executableURL = try Self.resolveExecutable(executable)
-        let result = try await Task.detached(priority: .userInitiated) {
-            try Self.runSynchronously(
-                executableURL: executableURL,
-                arguments: Self.agentLaunchArguments(
-                    runManifest: runManifest,
-                    piCommand: piCommand,
-                    pluginCommand: executableURL.path
-                ),
-                environment: [:]
-            )
-        }.value
+        let result = try await run(Self.agentLaunchArguments(
+            runManifest: runManifest,
+            piCommand: piCommand,
+            pluginCommand: try Self.resolveExecutable(executable).path
+        ), timeout: 120)
         return try decode(PiAgentLaunchSpec.self, from: result.stdout)
     }
 
@@ -165,67 +177,29 @@ public struct FilmToolClient: Sendable {
         ]
     }
 
+    /// Runs the tool to completion. `timeout` bounds wall-clock runtime;
+    /// passing `nil` leaves the command unbounded (still cancellable through
+    /// task cancellation, which terminates the child process).
     public func run(
         _ arguments: [String],
-        environment: [String: String] = [:]
+        environment: [String: String] = [:],
+        timeout: TimeInterval? = nil
     ) async throws -> ProcessResult {
         let executableURL = try Self.resolveExecutable(executable)
-        return try await Task.detached(priority: .userInitiated) {
-            try Self.runSynchronously(
-                executableURL: executableURL,
-                arguments: arguments,
-                environment: environment
-            )
-        }.value
-    }
-
-    private static func runSynchronously(
-        executableURL: URL,
-        arguments: [String],
-        environment: [String: String]
-    ) throws -> ProcessResult {
-        let process = Process()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.executableURL = executableURL
-        process.arguments = arguments
-        if !environment.isEmpty {
-            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, override in override }
-        }
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        do {
-            try process.run()
-        } catch {
-            throw FilmToolError.launchFailed(error.localizedDescription)
-        }
-
-        let output = LockedData()
-        let errors = LockedData()
-        let group = DispatchGroup()
-        group.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            output.set(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
-            group.leave()
-        }
-        group.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            errors.set(stderrPipe.fileHandleForReading.readDataToEndOfFile())
-            group.leave()
-        }
-
-        process.waitUntilExit()
-        group.wait()
-        let result = ProcessResult(
-            executable: executableURL.path,
+        let runner = ChildProcessRunner(
+            executableURL: executableURL,
             arguments: arguments,
-            exitCode: process.terminationStatus,
-            stdout: String(decoding: output.value, as: UTF8.self),
-            stderr: String(decoding: errors.value, as: UTF8.self)
+            environment: environment
         )
-        guard result.succeeded else { throw FilmToolError.commandFailed(result) }
-        return result
+        return try await withTaskCancellationHandler {
+            // Detached so the blocking waits below never occupy the caller's
+            // actor or the cooperative thread pool's only threads.
+            try await Task.detached(priority: .userInitiated) {
+                try runner.runAndWait(timeout: timeout)
+            }.value
+        } onCancel: {
+            runner.terminate()
+        }
     }
 
     private static func piEnvironment(provider: String?, model: String?) -> [String: String] {
@@ -235,6 +209,14 @@ public struct FilmToolClient: Sendable {
         return environment
     }
 
+    /// Single-quotes a value for `/bin/sh -c` consumption.
+    public static func shellEscape(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// Resolves a bare name or path to an executable URL. Paths (including
+    /// tilde forms) are used as-is; bare names search an augmented PATH that
+    /// covers GUI-app blind spots (see `searchDirectories`).
     public static func resolveExecutable(_ value: String) throws -> URL {
         let expanded = NSString(string: value).expandingTildeInPath
         if expanded.contains("/") {
@@ -243,15 +225,39 @@ public struct FilmToolClient: Sendable {
             throw FilmToolError.executableNotFound(value)
         }
 
-        let environmentPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
-        let search = environmentPath.split(separator: ":").map(String.init) + [
-            "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin",
-        ]
+        let search = Self.searchDirectories()
         for directory in search {
             let candidate = URL(fileURLWithPath: directory).appending(path: value)
             if FileManager.default.isExecutableFile(atPath: candidate.path) { return candidate }
         }
         throw FilmToolError.executableNotFound(value)
+    }
+
+    /// GUI apps inherit a skeletal PATH, so augment it with the directories
+    /// where CLI tools actually live on developer Macs: Homebrew, the classic
+    /// Unix paths, ~/.local/bin, ~/bin, and every Node install managed by nvm.
+    static func searchDirectories(
+        environmentPath: String = ProcessInfo.processInfo.environment["PATH"] ?? "",
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [String] {
+        var directories = environmentPath.split(separator: ":").map(String.init)
+        directories += [
+            home.appending(path: ".local/bin").path,
+            home.appending(path: "bin").path,
+        ]
+        let nodeVersions = (try? FileManager.default.contentsOfDirectory(
+            at: home.appending(path: ".nvm/versions/node"),
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        directories += nodeVersions
+            .sorted { $0.lastPathComponent > $1.lastPathComponent }
+            .map { $0.appending(path: "bin").path }
+        directories += [
+            "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin",
+        ]
+        var seen = Set<String>()
+        return directories.filter { seen.insert($0).inserted }
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from text: String) throws -> T {
@@ -261,96 +267,4 @@ public struct FilmToolClient: Sendable {
             throw FilmToolError.invalidJSON(error.localizedDescription)
         }
     }
-}
-
-public enum PiExecutableResolver {
-    public static func resolve(_ value: String = "pi") throws -> URL {
-        if let executable = try? FilmToolClient.resolveExecutable(value) {
-            return executable
-        }
-        guard value == "pi", let bundled = bundledCandidates().first else {
-            throw FilmToolError.executableNotFound(value)
-        }
-        return bundled
-    }
-
-    static func bundledCandidates(
-        in agentsRoot: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appending(path: "Library/Application Support/MereRun/agents/pi")
-    ) -> [URL] {
-        let versions = (try? FileManager.default.contentsOfDirectory(
-            at: agentsRoot,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        )) ?? []
-        return versions
-            .sorted { isNewer($0.lastPathComponent, than: $1.lastPathComponent) }
-            .map { $0.appending(path: "pi/pi") }
-            .filter { FileManager.default.isExecutableFile(atPath: $0.path) }
-    }
-
-    private static func versionComponents(_ value: String) -> [Int] {
-        value
-            .trimmingPrefix("v")
-            .split(separator: ".")
-            .map { Int($0.prefix(while: { $0.isNumber })) ?? 0 }
-    }
-
-    private static func isNewer(_ lhs: String, than rhs: String) -> Bool {
-        let lhsComponents = versionComponents(lhs)
-        let rhsComponents = versionComponents(rhs)
-        for (left, right) in zip(lhsComponents, rhsComponents) where left != right {
-            return left > right
-        }
-        return lhsComponents.count > rhsComponents.count
-    }
-}
-
-public struct FilmAnimaticExportReceipt: Codable, Sendable, Equatable {
-    public let ok: Bool
-    public let contractVersion: String
-    public let manifest: String
-    public let manifestSha256: String
-    public let projectId: String
-    public let shots: Int
-    public let assets: Int
-    public let bytes: Int64
-    public let runId: String?
-}
-
-private final class LockedData: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage = Data()
-
-    var value: Data {
-        lock.withLock { storage }
-    }
-
-    func set(_ data: Data) {
-        lock.withLock { storage = data }
-    }
-}
-
-public struct FilmStatusResponse: Codable, Sendable, Equatable {
-    public let contractVersion: String
-    public let runId: String
-    public let projectId: String
-    public let title: String
-    public let status: String
-    public let phase: String
-    public let nextGate: String?
-    public let openQuestions: [String]
-    public let approvals: [String: FilmApproval]
-    public let taskCounts: [String: Int]
-    public let shots: Int
-    public let reviewRequests: [FilmReviewRequest]
-    public let jobs: Int
-    public let artifacts: Int
-    public let issues: [FilmIssue]
-    public let proof: FilmProof
-    public let productionMode: String
-    public let takesPerShot: Int
-    public let projectDirectory: String
-    public let runManifest: String
-    public let reviewPackage: String?
 }

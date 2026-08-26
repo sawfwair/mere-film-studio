@@ -17,5 +17,8 @@ let package = Package(
             dependencies: ["FilmStudioCore"],
             path: "Tests/FilmStudioCoreTests"
         ),
-    ]
+    ],
+    // Swift 6 language mode everywhere: strict concurrency is the floor, not
+    // an opt-in. The app targets mirror this via SWIFT_VERSION in project.yml.
+    swiftLanguageModes: [.v6]
 )

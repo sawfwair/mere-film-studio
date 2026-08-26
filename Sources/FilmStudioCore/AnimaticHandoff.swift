@@ -81,36 +81,15 @@ public enum AnimaticHandoffError: LocalizedError, Equatable {
 }
 
 public enum AnimaticHandoffBuilder {
-    private static let exportedKinds: Set<String> = [
-        "cast-master", "location-master", "shot-keyframe", "shot-clip",
-        "dialogue", "sound-effect", "score", "subtitle-srt", "subtitle-vtt",
-        "caption-receipt", "edit-block", "edit-block-receipt", "rough-cut", "final-master",
-        "delivery-master", "poster", "thumbnail", "technical-review",
-        "creative-review", "media-inspection", "inspection-frame", "review-frame",
-        "dialogue-qc", "sound-qc", "take-selection", "production-readiness",
-        "review-package", "human-review", "delivery",
-    ]
-
     public static func build(
         from snapshot: FilmWorkspaceSnapshot,
         projectRoot: String = ".",
         exportedAt: String? = nil
     ) throws -> AnimaticHandoff {
         guard let plan = snapshot.productionPlan else { throw AnimaticHandoffError.productionPlanMissing }
-        let assets = try snapshot.project.artifacts
-            .filter { exportedKinds.contains($0.kind) }
-            .map { artifact in
-                try validate(artifact: artifact, in: snapshot)
-                return AnimaticHandoffAsset(
-                    id: try stableAssetID(artifact),
-                    kind: artifact.kind,
-                    relativePath: artifact.path,
-                    sha256: artifact.sha256,
-                    bytes: artifact.bytes,
-                    contentType: artifact.contentType,
-                    source: artifact.source
-                )
-            }
+        // Re-hashing every exported artifact here is the whole point of the
+        // handoff: Animatic never receives a manifest we haven't verified.
+        let assets = try verifiedAssets(in: snapshot)
 
         let assetsByPath = Dictionary(uniqueKeysWithValues: assets.map { ($0.relativePath, $0) })
         var cursor = 0
@@ -165,6 +144,23 @@ public enum AnimaticHandoffBuilder {
             assets: assets,
             proof: snapshot.project.proof
         )
+    }
+
+    private static func verifiedAssets(in snapshot: FilmWorkspaceSnapshot) throws -> [AnimaticHandoffAsset] {
+        try snapshot.project.artifacts
+            .filter { ArtifactKind.exportable.contains($0.kind) }
+            .map { artifact in
+                try validate(artifact: artifact, in: snapshot)
+                return AnimaticHandoffAsset(
+                    id: try stableAssetID(artifact),
+                    kind: artifact.kind.rawValue,
+                    relativePath: artifact.path,
+                    sha256: artifact.sha256,
+                    bytes: artifact.bytes,
+                    contentType: artifact.contentType,
+                    source: artifact.source
+                )
+            }
     }
 
     public static func write(_ handoff: AnimaticHandoff, to url: URL) throws -> String {
