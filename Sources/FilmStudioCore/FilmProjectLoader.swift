@@ -38,6 +38,18 @@ public enum FilmProjectLoader {
                 at: root.appending(path: "production-plan.json"),
                 using: decoder
             )
+            if let plan = productionPlan {
+                // A copied or stale plan would render — and export — another
+                // film's shots under this project's identity.
+                guard plan.contractVersion == "mere.run/film-production-plan.v1" else {
+                    throw FilmProjectError.unsupportedContract(plan.contractVersion)
+                }
+                guard plan.projectId == project.projectId else {
+                    throw FilmProjectError.invalidProject(
+                        "production-plan.json belongs to project \"\(plan.projectId)\", not \"\(project.projectId)\"."
+                    )
+                }
+            }
             let treatment: FilmTreatment? = try decodeIfPresent(
                 FilmTreatment.self,
                 at: root.appending(path: "treatment.json"),

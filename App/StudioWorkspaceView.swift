@@ -135,7 +135,9 @@ private struct StudioSidebar: View {
                             SidebarRow(
                                 section: section,
                                 selected: studio.section == section,
-                                badge: section == .review ? snapshot.project.reviewRequests.count : 0
+                                badge: section == .review
+                                    ? snapshot.project.reviewRequests.filter { $0.appliedAt == nil }.count
+                                    : 0
                             ) {
                                 studio.section = section
                             }
@@ -213,7 +215,9 @@ private struct SidebarHealthRow: View {
             Image(systemName: blocked ? "exclamationmark.triangle.fill" : "checkmark.shield.fill")
                 .foregroundStyle(blocked ? Studio.fail : Studio.pass)
             VStack(alignment: .leading, spacing: 1) {
-                Text(blocked ? "Action needed" : "Ledger healthy")
+                // "No blocking issues", not "healthy": loading only reads the
+                // ledger; it does not re-verify files on disk.
+                Text(blocked ? "Action needed" : "No blocking issues")
                     .font(.caption.weight(.semibold))
                 Text(subtitle)
                     .font(.caption2)
@@ -226,7 +230,7 @@ private struct SidebarHealthRow: View {
     }
 
     private var subtitle: String {
-        var parts = ["\(snapshot.project.artifacts.count) verified artifacts"]
+        var parts = ["\(snapshot.project.artifacts.count) artifacts in the ledger"]
         if !watchingFiles {
             parts.append("file watching inactive — refresh manually")
         }
@@ -270,7 +274,13 @@ private struct PiRoom: View {
             .frame(height: 34)
             .background(.black.opacity(0.28))
 
-            if let command = studio.terminalCommand {
+            if case .unavailable(let reason) = GhosttyBridge.availability {
+                ContentUnavailableView(
+                    "Terminal unavailable",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text("\(reason) Run scripts/bootstrap-ghostty.sh and rebuild.")
+                )
+            } else if let command = studio.terminalCommand {
                 GhosttyTerminalView(
                     command: command,
                     workingDirectory: snapshot.root,

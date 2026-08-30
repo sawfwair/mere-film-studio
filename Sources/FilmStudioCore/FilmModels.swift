@@ -59,14 +59,18 @@ public struct FilmWorkspaceSnapshot: Sendable, Equatable {
 
     /// The best playable cut, in descending order of authority. Missing files
     /// are skipped so a stale ledger entry never breaks playback.
-    public var playableCutURL: URL? {
+    public var playableCut: FilmArtifact? {
         for kind in [ArtifactKind.deliveryMaster, .finalMaster, .roughCut] {
-            if let artifact = latestArtifact(kind: kind) {
-                let url = artifactURL(artifact)
-                if FileManager.default.fileExists(atPath: url.path) { return url }
+            if let artifact = latestArtifact(kind: kind),
+               FileManager.default.fileExists(atPath: artifactURL(artifact).path) {
+                return artifact
             }
         }
         return nil
+    }
+
+    public var playableCutURL: URL? {
+        playableCut.map(artifactURL)
     }
 }
 
@@ -284,10 +288,21 @@ public struct FilmReviewRequest: Codable, Sendable, Equatable, Identifiable {
 
 public struct FilmJob: Codable, Sendable, Equatable, Identifiable {
     public let id: String
-    public let kind: String?
+    public let kind: ArtifactKind?
     public let status: FilmContractStatus?
     public let shotId: String?
+    /// What the job worked on (a shot, cast member, or location id). The
+    /// current tools serialize this as `subject`; `shotId` covers older runs.
+    public let subject: String?
+    /// Which take candidate this job renders, for multi-take productions.
+    public let candidateIndex: Int?
+    /// Project-relative path of the file the job produces.
+    public let output: String?
     public let error: String?
+
+    /// The shot or canon id this job belongs to, whichever field the wire
+    /// contract carried.
+    public var subjectID: String? { shotId ?? subject }
 }
 
 public struct FilmProductionConfiguration: Codable, Sendable, Equatable {

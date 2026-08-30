@@ -72,6 +72,39 @@ struct ProcessExecutionTests {
         #expect(terminated)
     }
 
+    @Test func cancellationEscalatesToSigkillWhenTermIsIgnored() async throws {
+        let script = FileManager.default.temporaryDirectory
+            .appending(path: "mere-film-studio-stubborn-\(UUID().uuidString).sh")
+        // Ignores SIGTERM outright; only SIGKILL can end it.
+        let body = """
+        #!/bin/sh
+        trap '' TERM
+        i=0
+        while [ "$i" -lt 600 ]; do sleep 0.1; i=$((i+1)); done
+        """
+        try Data(body.utf8).write(to: script)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        defer { try? FileManager.default.removeItem(at: script) }
+
+        let runner = ChildProcessRunner(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: [script.path],
+            environment: [:],
+            killGracePeriod: 0.3
+        )
+        let started = Date()
+        let task = Task.detached {
+            try runner.runAndWait(timeout: nil)
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        runner.terminate()
+
+        await #expect(throws: CancellationError.self) { _ = try await task.value }
+        // SIGKILL must land shortly after the grace period, not after the
+        // script's full 60-second run.
+        #expect(Date().timeIntervalSince(started) < 10)
+    }
+
     @Test func nonzeroExitSurfacesStderrAsCommandFailure() async throws {
         let script = FileManager.default.temporaryDirectory
             .appending(path: "mere-film-studio-fail-\(UUID().uuidString).sh")

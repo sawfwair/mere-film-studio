@@ -72,8 +72,10 @@ private struct CanonGrid: View {
                 .panelTitle()
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 14)], spacing: 14) {
                 ForEach(plan.cast) { member in
+                    let master = artifact(kind: .castMaster, suffix: "/\(member.id).png")
                     CanonCard(
-                        image: artifactURL(kind: .castMaster, suffix: "/\(member.id).png"),
+                        image: master.map(snapshot.artifactURL),
+                        imageRevision: master?.sha256,
                         category: "Cast",
                         title: member.name,
                         detail: member.visual,
@@ -81,8 +83,10 @@ private struct CanonGrid: View {
                     )
                 }
                 ForEach(plan.locations) { location in
+                    let master = artifact(kind: .locationMaster, suffix: "/\(location.id).png")
                     CanonCard(
-                        image: artifactURL(kind: .locationMaster, suffix: "/\(location.id).png"),
+                        image: master.map(snapshot.artifactURL),
+                        imageRevision: master?.sha256,
                         category: "Location",
                         title: location.name,
                         detail: location.visual,
@@ -93,8 +97,8 @@ private struct CanonGrid: View {
         }
     }
 
-    private func artifactURL(kind: ArtifactKind, suffix: String) -> URL? {
-        snapshot.project.artifacts.last { $0.kind == kind && $0.path.hasSuffix(suffix) }.map(snapshot.artifactURL)
+    private func artifact(kind: ArtifactKind, suffix: String) -> FilmArtifact? {
+        snapshot.project.artifacts.last { $0.kind == kind && $0.path.hasSuffix(suffix) }
     }
 }
 
@@ -118,6 +122,7 @@ private struct LanguageCard: View {
 
 private struct CanonCard: View {
     let image: URL?
+    let imageRevision: String?
     let category: String
     let title: String
     let detail: String
@@ -125,7 +130,7 @@ private struct CanonCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ArtifactImage(url: image)
+            ArtifactImage(url: image, revision: imageRevision)
                 .frame(height: 170)
                 .clipped()
             VStack(alignment: .leading, spacing: 6) {

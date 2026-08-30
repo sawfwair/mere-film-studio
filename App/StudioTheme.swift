@@ -29,10 +29,10 @@ enum Studio {
 
     /// One duration format for the whole app: `m:ss.t`.
     static func timecode(_ seconds: Double) -> String {
-        let clamped = max(0, seconds)
-        let minutes = Int(clamped) / 60
-        let remainder = clamped - Double(minutes * 60)
-        return String(format: "%d:%04.1f", minutes, remainder)
+        // Round to tenths before splitting so 59.96 carries to 1:00.0
+        // instead of rendering as 0:60.0.
+        let tenths = Int((max(0, seconds) * 10).rounded())
+        return String(format: "%d:%04.1f", tenths / 600, Double(tenths % 600) / 10)
     }
 
     /// Whole-second variant for target lengths and totals: `m:ss`.

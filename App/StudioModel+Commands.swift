@@ -7,7 +7,9 @@ import Foundation
 @MainActor
 extension StudioModel {
     func createFilm(idea: String, title: String, duration: Int, parentDirectory: URL) {
-        perform("Creating the studio project…") { [filmToolExecutable, piExecutable] in
+        // No trailing refresh: the operation opens the new project itself, and
+        // refreshing the previous film here would race that load and win.
+        perform("Creating the studio project…", refreshes: false) { [filmToolExecutable, piExecutable] in
             let client = FilmToolClient(executable: filmToolExecutable)
             let pi = try PiExecutableResolver.resolve(piExecutable)
             let run = try await client.plan(
@@ -27,17 +29,23 @@ extension StudioModel {
     /// Presents the approval sheet for a gate. Actual recording happens in
     /// `confirmPendingApproval` once the human has seen the evidence summary.
     func requestApproval(gate: FilmGate) {
-        guard !isBusy else { return }
+        guard !isBusy, let snapshot else { return }
         approvalNote = ""
         pendingApproval = PendingApproval(
+            runManifest: snapshot.runManifest,
             gate: gate,
-            summary: snapshot?.project.approvals[gate.rawValue]?.summary
+            summary: snapshot.project.approvals[gate.rawValue]?.summary
         )
     }
 
     func confirmPendingApproval() {
         guard let pending = pendingApproval else { return }
         pendingApproval = nil
+        guard snapshot?.runManifest == pending.runManifest else {
+            errorMessage = "The open film changed while the approval sheet was up. Nothing was recorded."
+            fullErrorDetails = nil
+            return
+        }
         approve(gate: pending.gate, note: approvalNote)
     }
 
@@ -61,6 +69,7 @@ extension StudioModel {
         guard let run = snapshot?.runManifest else { return }
         guard let piRoomConfiguration else {
             errorMessage = StudioError.piRoomUnavailable.localizedDescription
+            fullErrorDetails = nil
             return
         }
         perform("Pi and the studio are advancing the film…") { [filmToolExecutable] in
@@ -85,6 +94,7 @@ extension StudioModel {
         guard let run = snapshot?.runManifest else { return }
         guard let piRoomConfiguration else {
             errorMessage = StudioError.piRoomUnavailable.localizedDescription
+            fullErrorDetails = nil
             return
         }
         perform("Running technical and independent creative review…") { [filmToolExecutable] in
@@ -114,7 +124,12 @@ extension StudioModel {
             let manifest = try await Self.writeVerifiedHandoff(snapshot: snapshot)
             let receipt = try await AnimaticClient(executable: animaticExecutable)
                 .importFilm(manifest: manifest)
-            await MainActor.run { self.handoffReceipt = receipt }
+            await MainActor.run {
+                // Only show the receipt on the film it belongs to.
+                if self.snapshot?.runManifest == snapshot.runManifest {
+                    self.handoffReceipt = receipt
+                }
+            }
         }
     }
 
@@ -124,29 +139,45 @@ extension StudioModel {
             let manifest = try await Self.writeVerifiedHandoff(snapshot: snapshot)
             let receipt = try await AnimaticClient(executable: animaticExecutable)
                 .validateFilm(manifest: manifest)
-            await MainActor.run { self.handoffValidation = receipt }
+            await MainActor.run {
+                if self.snapshot?.runManifest == snapshot.runManifest {
+                    self.handoffValidation = receipt
+                }
+            }
         }
     }
 
     private static func writeVerifiedHandoff(snapshot: FilmWorkspaceSnapshot) async throws -> URL {
         let output = snapshot.root.appending(path: "exports/animatic/film-animatic-handoff.json")
         return try await Task.detached(priority: .userInitiated) {
-            let handoff = try AnimaticHandoffBuilder.build(from: snapshot)
+            // The importer resolves projectRoot relative to the manifest's own
+            // directory, and the manifest lives two levels below the project
+            // root — "." here makes animatic look for exports/animatic/run.json.
+            let handoff = try AnimaticHandoffBuilder.build(from: snapshot, projectRoot: "../..")
             _ = try AnimaticHandoffBuilder.write(handoff, to: output)
             return output
         }.value
     }
 
-    private func perform(_ description: String, operation: @escaping @Sendable () async throws -> Void) {
+    private func perform(
+        _ description: String,
+        refreshes: Bool = true,
+        operation: @escaping @Sendable () async throws -> Void
+    ) {
         guard !isBusy else { return }
         isBusy = true
         activity = description
         errorMessage = nil
+        fullErrorDetails = nil
+        // The command belongs to the film that was open when it started; if
+        // the human switches films meanwhile, don't refresh the new one over
+        // a result it never asked for.
+        let boundRun = snapshot?.runManifest
         commandTask?.cancel()
         commandTask = Task {
             do {
                 try await operation()
-                refresh()
+                if refreshes, snapshot?.runManifest == boundRun { refresh() }
             } catch is CancellationError {
                 // A replacement task or an explicit cancel owns the indicator.
             } catch {

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SoundView: View {
     let snapshot: FilmWorkspaceSnapshot
+    @StateObject private var preview = AudioPreview()
 
     var body: some View {
         ScrollView {
@@ -11,8 +12,13 @@ struct SoundView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Score")
                             .panelTitle()
-                        Label(plan.scorePrompt, systemImage: "music.note.list")
-                            .font(.title3)
+                        HStack(spacing: 10) {
+                            if let score = audioTakes.first(where: { $0.isScore }) {
+                                AudioPreviewButton(preview: preview, url: score.url)
+                            }
+                            Label(plan.scorePrompt, systemImage: "music.note.list")
+                                .font(.title3)
+                        }
                         HStack(spacing: 14) {
                             SoundMetric(symbol: "quote.bubble", value: "\(plan.shots.flatMap(\.dialogue).count)", label: "dialogue cues")
                             SoundMetric(symbol: "waveform.badge.plus", value: "\(plan.shots.flatMap(\.soundEffects).count)", label: "sound cues")
@@ -21,6 +27,32 @@ struct SoundView: View {
                         }
                     }
                     .studioPanel()
+
+                    if !audioTakes.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Audio takes")
+                                .panelTitle()
+                            ForEach(audioTakes) { take in
+                                HStack(spacing: 12) {
+                                    AudioPreviewButton(preview: preview, url: take.url)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(take.label)
+                                            .font(.callout.weight(.medium))
+                                        Text(take.detail)
+                                            .font(.caption)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .contextMenu {
+                                    Button("Show in Finder") {
+                                        NSWorkspace.shared.activateFileViewerSelecting([take.url])
+                                    }
+                                }
+                            }
+                        }
+                        .studioPanel()
+                    }
 
                     ForEach(plan.shots.filter { !$0.dialogue.isEmpty || !$0.soundEffects.isEmpty }) { shot in
                         VStack(alignment: .leading, spacing: 12) {
@@ -51,7 +83,54 @@ struct SoundView: View {
             }
             .padding(24)
         }
+        .onDisappear { preview.stop() }
     }
+
+    /// Every rendered piece of audio the ledger knows about, score first.
+    /// The score file can exist before its ledger entry does (the tools write
+    /// audio/score.wav during scoring), so that one path is also checked by
+    /// convention.
+    private var audioTakes: [AudioTake] {
+        var takes: [AudioTake] = []
+        var seenPaths = Set<String>()
+        let kinds: [(ArtifactKind, String, Bool)] = [
+            (.score, "Score", true),
+            (.dialogue, "Dialogue", false),
+            (.soundEffect, "Sound effect", false),
+        ]
+        for (kind, label, isScore) in kinds {
+            for artifact in snapshot.project.artifacts where artifact.kind == kind {
+                guard seenPaths.insert(artifact.path).inserted else { continue }
+                let url = snapshot.artifactURL(artifact)
+                guard FileManager.default.fileExists(atPath: url.path) else { continue }
+                takes.append(AudioTake(
+                    id: artifact.path,
+                    label: StudioText.humanize(url.deletingPathExtension().lastPathComponent),
+                    detail: label,
+                    url: url,
+                    isScore: isScore
+                ))
+            }
+        }
+        if !takes.contains(where: \.isScore) {
+            let conventional = snapshot.root.appending(path: "audio/score.wav")
+            if FileManager.default.fileExists(atPath: conventional.path) {
+                takes.insert(
+                    AudioTake(id: "audio/score.wav", label: "Score", detail: "Score", url: conventional, isScore: true),
+                    at: 0
+                )
+            }
+        }
+        return takes.sorted { $0.isScore && !$1.isScore }
+    }
+}
+
+private struct AudioTake: Identifiable {
+    let id: String
+    let label: String
+    let detail: String
+    let url: URL
+    let isScore: Bool
 }
 
 private struct SoundMetric: View {

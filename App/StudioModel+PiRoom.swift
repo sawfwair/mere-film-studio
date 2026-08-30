@@ -33,8 +33,12 @@ extension StudioModel {
     }
 
     var piRoomModelLabel: String {
-        piRoomConfiguration.map { "\($0.model.displayName) · \($0.model.id)" }
-            ?? "Preparing local agent…"
+        if let configuration = piRoomConfiguration {
+            return "\(configuration.model.displayName) · \(configuration.model.id)"
+        }
+        if snapshot == nil { return "Open a film to start the local agent" }
+        if terminalSetupError != nil { return "Unavailable — see the Pi room for details" }
+        return "Preparing local agent…"
     }
 
     var terminalUnavailableReason: String {

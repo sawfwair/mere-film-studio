@@ -16,6 +16,12 @@ struct StudioRootView: View {
                     .background(StudioBackdrop())
             }
         }
+        // Drop a film project folder (or its run.json) anywhere to open it.
+        .dropDestination(for: URL.self) { urls, _ in
+            guard let url = urls.first else { return false }
+            studio.openProject(url)
+            return true
+        }
         .sheet(isPresented: $studio.showCreateFilm) {
             CreateFilmView()
                 .environmentObject(studio)
@@ -37,7 +43,9 @@ struct StudioRootView: View {
 
     private var errorBinding: Binding<Bool> {
         Binding(
-            get: { studio.errorMessage != nil },
+            // While the create sheet is up, failures render inline in the
+            // sheet; an alert here would try to present behind it.
+            get: { studio.errorMessage != nil && !studio.showCreateFilm },
             set: { if !$0 { studio.errorMessage = nil } }
         )
     }

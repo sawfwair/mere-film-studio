@@ -26,7 +26,7 @@ struct DeliveryView: View {
                 .studioPanel()
 
                 HStack(alignment: .top, spacing: 16) {
-                    ProofChecklist(proof: snapshot.project.proof)
+                    ProofChecklist(snapshot: snapshot)
                         .frame(maxWidth: .infinity)
 
                     VStack(alignment: .leading, spacing: 14) {
@@ -70,8 +70,51 @@ struct DeliveryView: View {
                     .frame(width: 330)
                     .studioPanel()
                 }
+
+                if !keyArt.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Key art")
+                            .panelTitle()
+                        HStack(alignment: .top, spacing: 14) {
+                            ForEach(keyArt, id: \.artifact.id) { item in
+                                Button {
+                                    NSWorkspace.shared.open(snapshot.artifactURL(item.artifact))
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        ArtifactImage(
+                                            url: snapshot.artifactURL(item.artifact),
+                                            revision: item.artifact.sha256
+                                        )
+                                        .frame(width: 220, height: 140)
+                                        .clipShape(RoundedRectangle(cornerRadius: Studio.radiusMedium, style: .continuous))
+                                        .overlay {
+                                            RoundedRectangle(cornerRadius: Studio.radiusMedium, style: .continuous)
+                                                .strokeBorder(Studio.stroke)
+                                        }
+                                        Text(item.label)
+                                            .font(.caption.weight(.medium))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .studioHoverLift()
+                                .help("Open \(item.artifact.path)")
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .studioPanel()
+                }
             }
             .padding(24)
+        }
+    }
+
+    private var keyArt: [(label: String, artifact: FilmArtifact)] {
+        [("Poster", ArtifactKind.poster), ("Thumbnail", .thumbnail)].compactMap { label, kind in
+            guard let artifact = snapshot.latestArtifact(kind: kind),
+                  FileManager.default.fileExists(atPath: snapshot.artifactURL(artifact).path) else { return nil }
+            return (label, artifact)
         }
     }
 }
