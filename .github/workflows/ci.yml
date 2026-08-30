@@ -15,8 +15,8 @@ concurrency:
 jobs:
   native:
     runs-on: macos-15
-    # Generous enough for one cold GhosttyKit build; cached runs take minutes.
-    timeout-minutes: 240
+    # The cold GhosttyKit build takes ~15 minutes; everything else is small.
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,5 +57,26 @@ jobs:
             Generated/GhosttyResources
           key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Vendor/ghostty-version.json') }}
 
-      - name: Verify native application
-        run: ./scripts/check.sh
+      # check.sh is split into steps here so a hang or failure names its
+      # stage instead of eating the whole job timeout (swift test has hung
+      # at startup on runners before — the step bound turns that into a
+      # fast, attributable failure).
+      - name: Lint
+        timeout-minutes: 10
+        run: swiftlint lint --strict --quiet --config .swiftlint.yml
+
+      - name: Package tests
+        timeout-minutes: 20
+        run: swift test --enable-code-coverage --verbose
+
+      - name: Build application
+        timeout-minutes: 40
+        run: |
+          ./scripts/generate-project.sh
+          xcodebuild \
+            -project MereFilmStudio.xcodeproj \
+            -scheme MereFilmStudio \
+            -configuration Debug \
+            -derivedDataPath .build/xcode-derived \
+            CODE_SIGNING_ALLOWED=NO \
+            build
