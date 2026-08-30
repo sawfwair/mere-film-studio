@@ -93,8 +93,14 @@ struct ProcessExecutionTests {
             killGracePeriod: 0.3
         )
         let started = Date()
-        let task = Task.detached {
-            try runner.runAndWait(timeout: nil)
+        // A real thread, like production: blocking the cooperative pool here
+        // can starve the very continuation that calls terminate() below.
+        let task = Task {
+            try await withCheckedThrowingContinuation { continuation in
+                Thread.detachNewThread {
+                    continuation.resume(with: Result { try runner.runAndWait(timeout: nil) })
+                }
+            }
         }
         try await Task.sleep(for: .milliseconds(300))
         runner.terminate()

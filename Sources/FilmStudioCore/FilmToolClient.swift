@@ -192,11 +192,16 @@ public struct FilmToolClient: Sendable {
             environment: environment
         )
         return try await withTaskCancellationHandler {
-            // Detached so the blocking waits below never occupy the caller's
-            // actor or the cooperative thread pool's only threads.
-            try await Task.detached(priority: .userInitiated) {
-                try runner.runAndWait(timeout: timeout)
-            }.value
+            // A dedicated thread, not Task.detached: runAndWait blocks until
+            // the child exits, and parking that on the cooperative pool can
+            // starve it entirely on small machines (three concurrent runs
+            // occupy every thread of a 3-core pool, and no other task — not
+            // even the cancellation that would end the wait — can run).
+            try await withCheckedThrowingContinuation { continuation in
+                Thread.detachNewThread {
+                    continuation.resume(with: Result { try runner.runAndWait(timeout: timeout) })
+                }
+            }
         } onCancel: {
             runner.terminate()
         }
