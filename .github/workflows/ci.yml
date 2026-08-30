@@ -6,9 +6,17 @@ on:
     branches:
       - main
 
+# A newer push supersedes a queued or running build of the same ref; the
+# macOS runner pool is too small to spend on stale commits.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   native:
     runs-on: macos-15
+    # Generous enough for one cold GhosttyKit build; cached runs take minutes.
+    timeout-minutes: 240
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,10 +28,29 @@ jobs:
           swift --version
 
       - name: Install build tools
-        run: brew install anyzig swiftlint xcodegen
+        run: brew install swiftlint xcodegen
 
       - name: Restore pinned GhosttyKit
-        uses: actions/cache@v4
+        id: ghostty
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .build/dependencies/GhosttyKit.xcframework
+            Generated/GhosttyResources
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Vendor/ghostty-version.json') }}
+
+      - name: Build pinned GhosttyKit
+        if: steps.ghostty.outputs.cache-hit != 'true'
+        run: |
+          brew install anyzig
+          ./scripts/bootstrap-ghostty.sh
+
+      # Saved immediately, not in a post step: one successful bootstrap must
+      # survive even when a later lint, test, or build step fails, or every
+      # run pays the whole zig build again and the queue never drains.
+      - name: Save pinned GhosttyKit
+        if: steps.ghostty.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
         with:
           path: |
             .build/dependencies/GhosttyKit.xcframework
