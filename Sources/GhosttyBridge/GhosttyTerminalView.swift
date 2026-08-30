@@ -4,11 +4,11 @@ import Foundation
 import GhosttyKit
 import SwiftUI
 
-private func decodeUTF8(_ pointer: UnsafePointer<CChar>, count: Int) -> String {
+func decodeUTF8(_ pointer: UnsafePointer<CChar>, count: Int) -> String {
     String(decoding: UnsafeRawBufferPointer(start: pointer, count: count), as: UTF8.self)
 }
 
-private enum GhosttyGlobal {
+enum GhosttyGlobal {
     static let initialized = ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == GHOSTTY_SUCCESS
 }
 
@@ -32,10 +32,23 @@ public enum GhosttyBridge {
 
 @MainActor
 public final class GhosttyTerminalModel: ObservableObject {
-    @Published public fileprivate(set) var title = "Pi producer-director"
-    @Published public fileprivate(set) var workingDirectory: String?
-    @Published public fileprivate(set) var processExited = false
-    @Published public fileprivate(set) var rendererHealthy = true
+    // Setters are internal so the runtime callbacks (same module, separate
+    // file) can publish updates; the app only reads.
+    @Published public private(set) var title = "Pi producer-director"
+    @Published public private(set) var workingDirectory: String?
+    @Published public private(set) var processExited = false
+    @Published public private(set) var rendererHealthy = true
+
+    func setTitle(_ value: String) { title = value }
+    func setWorkingDirectory(_ value: String?) { workingDirectory = value }
+    func setProcessExited(_ value: Bool) { processExited = value }
+    func setRendererHealthy(_ value: Bool) { rendererHealthy = value }
+
+    /// Clears per-session state when a fresh terminal surface starts.
+    func resetSessionState() {
+        processExited = false
+        rendererHealthy = true
+    }
 
     public init() {}
 }
@@ -75,8 +88,8 @@ public struct GhosttyTerminalView: NSViewRepresentable {
 
 @MainActor
 public final class GhosttySurfaceView: NSView {
-    fileprivate nonisolated(unsafe) var surface: ghostty_surface_t?
-    fileprivate let model: GhosttyTerminalModel
+    nonisolated(unsafe) var surface: ghostty_surface_t?
+    let model: GhosttyTerminalModel
     private var isFocused = false
 
     public override var acceptsFirstResponder: Bool { true }
@@ -91,11 +104,11 @@ public final class GhosttySurfaceView: NSView {
     ) {
         self.model = model
         super.init(frame: NSRect(x: 0, y: 0, width: 960, height: 420))
-        model.processExited = false
-        model.rendererHealthy = true
+        GhosttySurfaceRegistry.shared.register(self)
+        model.resetSessionState()
         focusRingType = .none
 
-        guard let app = runtime.app else { return }
+        guard let app = runtime.application else { return }
         var config = ghostty_surface_config_new()
         config.platform_tag = GHOSTTY_PLATFORM_MACOS
         config.platform = ghostty_platform_u(
@@ -216,15 +229,13 @@ public final class GhosttySurfaceView: NSView {
 
     public func updateAppearance() {
         guard let surface else { return }
-        let appearance = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
-        ghostty_surface_set_color_scheme(
-            surface,
-            appearance == .darkAqua ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT
-        )
+        // The app pins the whole UI to dark (see MereFilmStudioApp), so the
+        // terminal always follows dark rather than tracking the system.
+        ghostty_surface_set_color_scheme(surface, GHOSTTY_COLOR_SCHEME_DARK)
     }
 
-    fileprivate func childExited() {
-        model.processExited = true
+    func childExited() {
+        model.setProcessExited(true)
     }
 
     private func updateFocus(_ focused: Bool) {
@@ -273,230 +284,11 @@ public final class GhosttySurfaceView: NSView {
     }
 }
 
-private func filmStudioGhosttyWakeup(_ userdata: UnsafeMutableRawPointer?) {
-    GhosttyRuntime.runtimeWakeup(userdata)
-}
-
-private func filmStudioGhosttyAction(
-    _ app: ghostty_app_t?,
-    _ target: ghostty_target_s,
-    _ action: ghostty_action_s
-) -> Bool {
-    GhosttyRuntime.runtimeAction(app, target, action)
-}
-
-private func filmStudioGhosttyReadClipboard(
-    _ userdata: UnsafeMutableRawPointer?,
-    _ location: ghostty_clipboard_e,
-    _ state: UnsafeMutableRawPointer?
-) -> Bool {
-    GhosttyRuntime.runtimeReadClipboard(userdata, location, state)
-}
-
-private func filmStudioGhosttyConfirmReadClipboard(
-    _ userdata: UnsafeMutableRawPointer?,
-    _ value: UnsafePointer<CChar>?,
-    _ state: UnsafeMutableRawPointer?,
-    _ request: ghostty_clipboard_request_e
-) {
-    GhosttyRuntime.runtimeConfirmReadClipboard(userdata, value, state, request)
-}
-
-private func filmStudioGhosttyWriteClipboard(
-    _ userdata: UnsafeMutableRawPointer?,
-    _ location: ghostty_clipboard_e,
-    _ content: UnsafePointer<ghostty_clipboard_content_s>?,
-    _ count: Int,
-    _ confirm: Bool
-) {
-    GhosttyRuntime.runtimeWriteClipboard(userdata, location, content, count, confirm)
-}
-
-private func filmStudioGhosttyCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ processAlive: Bool) {
-    GhosttyRuntime.runtimeCloseSurface(userdata, processAlive)
-}
-
-private final class GhosttyRuntime: @unchecked Sendable {
-    @MainActor
-    static let shared = GhosttyRuntime()
-
-    fileprivate nonisolated(unsafe) private(set) var app: ghostty_app_t?
-    private nonisolated(unsafe) var config: ghostty_config_t?
-
-    @MainActor
-    private init() {
-        guard GhosttyGlobal.initialized else { return }
-        guard let config = ghostty_config_new() else { return }
-        self.config = config
-        if let path = Bundle.main.url(forResource: "ghostty-studio", withExtension: "conf")?.path {
-            path.withCString { ghostty_config_load_file(config, $0) }
-        } else {
-            ghostty_config_load_default_files(config)
-        }
-        ghostty_config_finalize(config)
-
-        var runtime = ghostty_runtime_config_s(
-            userdata: Unmanaged.passUnretained(self).toOpaque(),
-            supports_selection_clipboard: false,
-            wakeup_cb: filmStudioGhosttyWakeup,
-            action_cb: filmStudioGhosttyAction,
-            read_clipboard_cb: filmStudioGhosttyReadClipboard,
-            confirm_read_clipboard_cb: filmStudioGhosttyConfirmReadClipboard,
-            write_clipboard_cb: filmStudioGhosttyWriteClipboard,
-            close_surface_cb: filmStudioGhosttyCloseSurface
-        )
-        app = ghostty_app_new(&runtime, config)
-        if let app { ghostty_app_set_focus(app, NSApp.isActive) }
-    }
-
-    deinit {
-        if let app { ghostty_app_free(app) }
-        if let config { ghostty_config_free(config) }
-    }
-
-    @MainActor
-    private func tick() {
-        guard let app else { return }
-        ghostty_app_tick(app)
-    }
-
-    fileprivate static func runtimeWakeup(_ userdata: UnsafeMutableRawPointer?) {
-        guard let userdata else { return }
-        let runtime = Unmanaged<GhosttyRuntime>.fromOpaque(userdata).takeUnretainedValue()
-        DispatchQueue.main.async { runtime.tick() }
-    }
-
-    fileprivate static func runtimeAction(
-        _ app: ghostty_app_t?,
-        _ target: ghostty_target_s,
-        _ action: ghostty_action_s
-    ) -> Bool {
-        _ = app
-        return handle(target: target, action: action)
-    }
-
-    fileprivate static func runtimeReadClipboard(
-        _ userdata: UnsafeMutableRawPointer?,
-        _ location: ghostty_clipboard_e,
-        _ state: UnsafeMutableRawPointer?
-    ) -> Bool {
-        _ = location
-        return readClipboard(userdata: userdata, state: state)
-    }
-
-    fileprivate static func runtimeConfirmReadClipboard(
-        _ userdata: UnsafeMutableRawPointer?,
-        _ value: UnsafePointer<CChar>?,
-        _ state: UnsafeMutableRawPointer?,
-        _ request: ghostty_clipboard_request_e
-    ) {
-        _ = value
-        _ = request
-        rejectClipboard(userdata: userdata, state: state)
-    }
-
-    fileprivate static func runtimeWriteClipboard(
-        _ userdata: UnsafeMutableRawPointer?,
-        _ location: ghostty_clipboard_e,
-        _ content: UnsafePointer<ghostty_clipboard_content_s>?,
-        _ count: Int,
-        _ confirm: Bool
-    ) {
-        _ = userdata
-        _ = location
-        writeClipboard(content: content, count: count, confirm: confirm)
-    }
-
-    fileprivate static func runtimeCloseSurface(_ userdata: UnsafeMutableRawPointer?, _ processAlive: Bool) {
-        _ = processAlive
-        guard let userdata else { return }
-        let address = UInt(bitPattern: userdata)
-        DispatchQueue.main.async {
-            surfaceView(address: address)?.childExited()
-        }
-    }
-
-    private static func handle(target: ghostty_target_s, action: ghostty_action_s) -> Bool {
-        guard target.tag == GHOSTTY_TARGET_SURFACE,
-              let surface = target.target.surface,
-              let userdata = ghostty_surface_userdata(surface) else {
-            return action.tag != GHOSTTY_ACTION_OPEN_URL
-        }
-        let address = UInt(bitPattern: userdata)
-
-        switch action.tag {
-        case GHOSTTY_ACTION_SET_TITLE:
-            if let pointer = action.action.set_title.title {
-                let title = String(cString: pointer)
-                DispatchQueue.main.async {
-                    surfaceView(address: address)?.model.title = title
-                }
-            }
-        case GHOSTTY_ACTION_PWD:
-            if let pointer = action.action.pwd.pwd {
-                let directory = String(cString: pointer)
-                DispatchQueue.main.async {
-                    surfaceView(address: address)?.model.workingDirectory = directory.removingPercentEncoding ?? directory
-                }
-            }
-        case GHOSTTY_ACTION_RENDERER_HEALTH:
-            let healthy = action.action.renderer_health == GHOSTTY_RENDERER_HEALTH_HEALTHY
-            DispatchQueue.main.async {
-                surfaceView(address: address)?.model.rendererHealthy = healthy
-            }
-        case GHOSTTY_ACTION_OPEN_URL:
-            guard let pointer = action.action.open_url.url else { return false }
-            let string = decodeUTF8(pointer, count: Int(action.action.open_url.len))
-            guard let url = URL(string: string), ["https", "http"].contains(url.scheme) else {
-                return false
-            }
-            DispatchQueue.main.async { NSWorkspace.shared.open(url) }
-        case GHOSTTY_ACTION_SHOW_CHILD_EXITED:
-            DispatchQueue.main.async {
-                surfaceView(address: address)?.childExited()
-            }
-        default:
-            break
-        }
-        return true
-    }
-
-    private static func readClipboard(userdata: UnsafeMutableRawPointer?, state: UnsafeMutableRawPointer?) -> Bool {
-        _ = userdata
-        _ = state
-        return false
-    }
-
-    private static func rejectClipboard(userdata: UnsafeMutableRawPointer?, state: UnsafeMutableRawPointer?) {
-        _ = userdata
-        _ = state
-    }
-
-    private static func writeClipboard(
-        content: UnsafePointer<ghostty_clipboard_content_s>?,
-        count: Int,
-        confirm: Bool
-    ) {
-        guard !confirm, let content, count > 0 else { return }
-        for index in 0..<count {
-            guard let mime = content[index].mime, String(cString: mime) == "text/plain",
-                  let data = content[index].data else { continue }
-            let value = String(cString: data)
-            DispatchQueue.main.async {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(value, forType: .string)
-            }
-            return
-        }
-    }
-
-    @MainActor
-    private static func surfaceView(address: UInt) -> GhosttySurfaceView? {
-        guard let pointer = UnsafeMutableRawPointer(bitPattern: address) else { return nil }
-        return Unmanaged<GhosttySurfaceView>.fromOpaque(pointer).takeUnretainedValue()
-    }
-}
-
+/// Maps the raw userdata pointers Ghostty hands back to callbacks onto live
+/// views. Entries hold weak references, so a callback that fires after a view
+/// deallocates (they arrive asynchronously on the main queue) finds nil
+/// instead of dereferencing a dangling pointer. Stale entries are harmless:
+/// they are overwritten if an address is ever reused by a new surface view.
 private extension Array where Element == String {
     func withCStrings<Result>(_ body: ([UnsafePointer<CChar>]) -> Result) -> Result {
         func descend(_ index: Int, _ pointers: [UnsafePointer<CChar>]) -> Result {

@@ -34,7 +34,10 @@ public struct MereRunAgentClient: Sendable {
     }
 
     public func status() async throws -> MereRunAgentStatus {
-        let result = try await FilmToolClient(executable: executable).run(["agent", "status", "--json"])
+        let result = try await FilmToolClient(executable: executable).run(
+            ["agent", "status", "--json"],
+            timeout: 60
+        )
         do {
             return try JSONDecoder().decode(MereRunAgentStatus.self, from: Data(result.stdout.utf8))
         } catch {

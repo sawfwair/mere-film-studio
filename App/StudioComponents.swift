@@ -6,7 +6,7 @@ import SwiftUI
 // MARK: - Status badge
 
 struct StatusBadge: View {
-    let status: String
+    let status: FilmContractStatus
 
     var body: some View {
         HStack(spacing: 6) {
@@ -24,12 +24,10 @@ struct StatusBadge: View {
     }
 
     private var color: Color {
-        switch status {
-        case "completed", "succeeded", "accepted", "approved": Studio.pass
-        case "running", "ready": Studio.accent
-        case "failed", "revision-required": Studio.fail
-        default: .secondary
-        }
+        if status.isSettled { return Studio.pass }
+        if status.isInFlight { return Studio.accent }
+        if status.isFailed { return Studio.fail }
+        return .secondary
     }
 }
 
@@ -38,25 +36,23 @@ struct StatusBadge: View {
 struct GateRail: View {
     let approvals: [String: FilmApproval]
 
-    static let gates = ["brief", "treatment", "production", "picture-lock", "delivery"]
-
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            ForEach(Self.gates, id: \.self) { gate in
-                GateRow(name: StudioText.gateName(gate), status: approvals[gate]?.status)
+            ForEach(FilmGate.allCases) { gate in
+                GateRow(name: gate.displayName, status: approvals[gate.rawValue]?.status)
             }
         }
         .animation(.spring(duration: 0.45), value: statuses)
     }
 
-    private var statuses: [String?] {
-        Self.gates.map { approvals[$0]?.status }
+    private var statuses: [FilmContractStatus?] {
+        FilmGate.allCases.map { approvals[$0.rawValue]?.status }
     }
 }
 
 private struct GateRow: View {
     let name: String
-    let status: String?
+    let status: FilmContractStatus?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -81,27 +77,21 @@ private struct GateRow: View {
     }
 
     private var statusLabel: String {
-        switch status {
-        case "approved": "Approved"
-        case "pending": "Awaiting you"
-        default: "Upcoming"
-        }
+        if status == .approved { return "Approved" }
+        if status == .pending { return "Awaiting you" }
+        return "Upcoming"
     }
 
     private var symbol: String {
-        switch status {
-        case "approved": "checkmark"
-        case "pending": "hand.raised.fill"
-        default: "lock.fill"
-        }
+        if status == .approved { return "checkmark" }
+        if status == .pending { return "hand.raised.fill" }
+        return "lock.fill"
     }
 
     private var tint: Color {
-        switch status {
-        case "approved": Studio.pass
-        case "pending": Studio.accent
-        default: .secondary
-        }
+        if status == .approved { return Studio.pass }
+        if status == .pending { return Studio.accent }
+        return .secondary
     }
 }
 
@@ -222,6 +212,9 @@ enum ArtifactImageLoader {
     @MainActor private static let cache = NSCache<NSURL, NSImage>()
 
     private struct DecodedImage: @unchecked Sendable {
+        // The wrapper exists only to carry the non-Sendable NSImage across the
+        // detached-task boundary without tripping strict concurrency checks;
+        // the image is handed to exactly one consumer on the main actor.
         let image: NSImage?
     }
 
@@ -295,6 +288,12 @@ struct LoopingClipView: NSViewRepresentable {
     func updateNSView(_ view: LoopingClipNSView, context: Context) {
         view.update(url: url)
     }
+
+    static func dismantleNSView(_ view: LoopingClipNSView, coordinator: ()) {
+        // Hover previews come and go constantly; without this, every dismissed
+        // preview keeps an AVPlayerLooper decoding video in the background.
+        view.pause()
+    }
 }
 
 final class LoopingClipNSView: NSView {
@@ -333,6 +332,11 @@ final class LoopingClipNSView: NSView {
         player = queue
         playerLayer.player = queue
         queue.play()
+    }
+
+    func pause() {
+        player?.pause()
+        playerLayer.player = nil
     }
 }
 

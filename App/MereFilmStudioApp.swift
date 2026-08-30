@@ -24,7 +24,7 @@ struct MereFilmStudioApp: App {
                 Button("Refresh Project") { studio.refresh() }
                     .keyboardShortcut("r")
                 Button("Approve Current Gate") {
-                    if let gate = studio.pendingGate { studio.approve(gate: gate) }
+                    if let gate = studio.pendingGate { studio.requestApproval(gate: gate) }
                 }
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(studio.pendingGate == nil || studio.isBusy)
@@ -34,6 +34,9 @@ struct MereFilmStudioApp: App {
                 Button("Run Studio Review") { studio.review() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                     .disabled(studio.snapshot == nil || studio.isBusy)
+                Button("Cancel Running Command") { studio.cancelRunning() }
+                    .keyboardShortcut(".", modifiers: .command)
+                    .disabled(!studio.isBusy)
                 Divider()
                 Button("Verify Animatic Handoff") { studio.validateAnimaticHandoff() }
                     .disabled(studio.snapshot == nil || studio.isBusy)

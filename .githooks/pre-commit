@@ -1,0 +1,10 @@
+#!/bin/zsh
+
+# Pre-commit gate for Mere Film Studio. Fast loop only — the full CI parity
+# check (./scripts/check.sh) runs in CI and should be run before opening a PR.
+
+set -euo pipefail
+script_dir=${0:A:h}
+repo_root=${script_dir:h}
+
+"$repo_root/scripts/check-fast.sh"

@@ -74,6 +74,16 @@ private struct WorkspaceToolbar: ToolbarContent {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .frame(maxWidth: 260)
+                    Button {
+                        studio.cancelRunning()
+                    } label: {
+                        Text("Cancel")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Studio.fail)
+                    .help("Stop the running command")
+                    .accessibilityLabel("Cancel running command")
                 }
                 .transition(.opacity)
             }
@@ -143,7 +153,7 @@ private struct StudioSidebar: View {
                 .padding(12)
             }
             Spacer(minLength: 0)
-            SidebarHealthRow(snapshot: snapshot)
+            SidebarHealthRow(snapshot: snapshot, watchingFiles: studio.watchingFiles)
         }
         .background(Studio.recessed)
     }
@@ -192,6 +202,7 @@ private struct SidebarRow: View {
 
 private struct SidebarHealthRow: View {
     let snapshot: FilmWorkspaceSnapshot
+    let watchingFiles: Bool
 
     private var blocked: Bool {
         snapshot.project.issues.contains(where: \.blocking)
@@ -204,7 +215,7 @@ private struct SidebarHealthRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(blocked ? "Action needed" : "Ledger healthy")
                     .font(.caption.weight(.semibold))
-                Text("\(snapshot.project.artifacts.count) verified artifacts")
+                Text(subtitle)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -212,6 +223,14 @@ private struct SidebarHealthRow: View {
         }
         .padding(12)
         .background(.black.opacity(0.18))
+    }
+
+    private var subtitle: String {
+        var parts = ["\(snapshot.project.artifacts.count) verified artifacts"]
+        if !watchingFiles {
+            parts.append("file watching inactive — refresh manually")
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -234,9 +253,10 @@ private struct PiRoom: View {
                 Circle()
                     .fill(model.processExited ? Studio.fail : (model.rendererHealthy ? Studio.pass : Studio.fail))
                     .frame(width: 7, height: 7)
-                Text(model.processExited ? "SESSION ENDED" : "GHOSTTY · LOCAL")
+                Text(statusText)
                     .font(.system(size: 9, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.tertiary)
+                    .accessibilityLabel(accessibilityStatus)
                 Button {
                     studio.restartTerminal()
                 } label: {
@@ -244,6 +264,7 @@ private struct PiRoom: View {
                 }
                 .buttonStyle(.plain)
                 .help("Restart Pi session")
+                .accessibilityLabel("Restart Pi session")
             }
             .padding(.horizontal, 14)
             .frame(height: 34)
@@ -268,5 +289,17 @@ private struct PiRoom: View {
             }
         }
         .background(Color(red: 0.035, green: 0.032, blue: 0.043))
+    }
+
+    private var statusText: String {
+        if model.processExited { return "SESSION ENDED" }
+        if !model.rendererHealthy { return "RENDERER DEGRADED" }
+        return "GHOSTTY · LOCAL"
+    }
+
+    private var accessibilityStatus: String {
+        if model.processExited { return "Pi session ended" }
+        if !model.rendererHealthy { return "Terminal renderer degraded" }
+        return "Ghostty terminal local session running"
     }
 }

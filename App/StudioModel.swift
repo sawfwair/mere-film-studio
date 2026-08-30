@@ -36,6 +36,15 @@ enum StudioSection: String, CaseIterable, Identifiable {
     }
 }
 
+/// An approval the human has been asked to confirm. Presented as a sheet so
+/// gates are never approved sight-unseen and always carry a real note.
+struct PendingApproval: Identifiable {
+    let gate: FilmGate
+    let summary: String?
+
+    var id: String { gate.rawValue }
+}
+
 @MainActor
 final class StudioModel: ObservableObject {
     @Published var snapshot: FilmWorkspaceSnapshot?
@@ -46,12 +55,17 @@ final class StudioModel: ObservableObject {
     @Published var isBusy = false
     @Published var activity = ""
     @Published var errorMessage: String?
+    @Published var fullErrorDetails: String?
+    @Published var startupNotice: String?
     @Published var handoffReceipt: AnimaticImportReceipt?
     @Published var handoffValidation: AnimaticImportReceipt?
     @Published var selectedShotID: String?
     @Published var terminalSessionID = UUID()
     @Published var piRoomConfiguration: PiRoomConfiguration?
     @Published var terminalSetupError: String?
+    @Published var pendingApproval: PendingApproval?
+    @Published var approvalNote = ""
+    @Published private(set) var watchingFiles = true
 
     @Published var filmToolExecutable: String {
         didSet {
@@ -75,14 +89,17 @@ final class StudioModel: ObservableObject {
         }
     }
 
-    var pendingGate: String? {
+    /// The first not-yet-approved gate in contract order.
+    var pendingGate: FilmGate? {
         guard let approvals = snapshot?.project.approvals else { return nil }
-        return ["brief", "treatment", "production", "picture-lock", "delivery"]
-            .first { approvals[$0]?.status == "pending" }
+        return FilmGate.allCases.first { approvals[$0.rawValue]?.status == .pending }
     }
 
     private var watcher: FilmWorkspaceWatcher?
-    private var commandTask: Task<Void, Never>?
+    /// Guards against a stale async load landing after the user switched
+    /// projects; only the newest generation may publish a snapshot.
+    private var loadGeneration = UUID()
+    var commandTask: Task<Void, Never>?
     var piSetupTask: Task<Void, Never>?
 
     init() {
@@ -100,13 +117,10 @@ final class StudioModel: ObservableObject {
         if let startupManifest = argumentManifest ?? environmentManifest {
             openProject(URL(fileURLWithPath: startupManifest), reportErrors: true)
         } else if let last = UserDefaults.standard.string(forKey: "lastFilmRunManifest") {
+            // Restoring silently is how people lose films; surface failures on
+            // the welcome screen instead.
             openProject(URL(fileURLWithPath: last), reportErrors: false)
         }
-    }
-
-    deinit {
-        commandTask?.cancel()
-        piSetupTask?.cancel()
     }
 
     func chooseProject() {
@@ -122,26 +136,67 @@ final class StudioModel: ObservableObject {
     }
 
     func openProject(_ url: URL, reportErrors: Bool = true) {
-        do {
-            let normalized = url.lastPathComponent == "run.json" ? url : url.appending(path: "run.json")
-            let loaded = try FilmProjectLoader.load(runManifest: normalized)
-            let projectChanged = loaded.runManifest != snapshot?.runManifest
-            if projectChanged {
-                terminalSessionID = UUID()
-                piRoomConfiguration = nil
+        let target = url.lastPathComponent == "run.json" ? url : url.appending(path: "run.json")
+        let generation = UUID()
+        loadGeneration = generation
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let standardized = target.standardizedFileURL
+                // Decode off the main thread so large ledgers never block the
+                // UI, even on slow volumes.
+                let loaded = try await Task.detached(priority: .userInitiated) {
+                    try FilmProjectLoader.load(runManifest: standardized)
+                }.value
+                guard self.loadGeneration == generation else { return }
+                self.applySnapshot(loaded)
+                if !reportErrors { self.startupNotice = nil }
+                self.errorMessage = nil
+            } catch {
+                // Watcher-driven refreshes race the tools' writes; a transient
+                // decode failure must never interrupt work already on screen.
+                if reportErrors {
+                    self.errorMessage = Self.presentableMessage(error)
+                    self.fullErrorDetails = String(describing: error)
+                } else if self.snapshot == nil {
+                    self.startupNotice = """
+                        Couldn't reopen your last film (\(target.lastPathComponent)): \
+                        \(Self.presentableMessage(error))
+                        """
+                }
             }
-            snapshot = loaded
-            selectedShotID = selectedShotID ?? loaded.productionPlan?.shots.first?.id
-            UserDefaults.standard.set(loaded.runManifest.path, forKey: "lastFilmRunManifest")
-            watcher = FilmWorkspaceWatcher(root: loaded.root) { [weak self] in
+        }
+    }
+
+    /// Watcher events land here after debouncing. Failures keep the current
+    /// snapshot and wait for the next event to retry.
+    func refresh() {
+        guard let runManifest = snapshot?.runManifest else { return }
+        openProject(runManifest, reportErrors: false)
+    }
+
+    private func applySnapshot(_ loaded: FilmWorkspaceSnapshot) {
+        let projectChanged = loaded.runManifest != snapshot?.runManifest
+        if projectChanged {
+            terminalSessionID = UUID()
+            piRoomConfiguration = nil
+            handoffReceipt = nil
+            handoffValidation = nil
+        }
+        snapshot = loaded
+        selectedShotID = selectedShotID ?? loaded.productionPlan?.shots.first?.id
+        UserDefaults.standard.set(loaded.runManifest.path, forKey: "lastFilmRunManifest")
+        do {
+            watcher = try FilmWorkspaceWatcher(root: loaded.root) { [weak self] in
                 Task { @MainActor in self?.refresh() }
             }
-            if projectChanged || piRoomConfiguration == nil {
-                preparePiRoom()
-            }
-            errorMessage = nil
+            watchingFiles = true
         } catch {
-            if reportErrors { errorMessage = error.localizedDescription }
+            watcher = nil
+            watchingFiles = false
+        }
+        if projectChanged || piRoomConfiguration == nil {
+            preparePiRoom()
         }
     }
 
@@ -151,163 +206,24 @@ final class StudioModel: ObservableObject {
         selectedShotID = nil
         piRoomConfiguration = nil
         terminalSetupError = nil
+        startupNotice = nil
+        handoffReceipt = nil
+        handoffValidation = nil
         piSetupTask?.cancel()
+        commandTask?.cancel()
         UserDefaults.standard.removeObject(forKey: "lastFilmRunManifest")
     }
 
-    func refresh() {
-        guard let runManifest = snapshot?.runManifest else { return }
-        openProject(runManifest)
-    }
-
     func restartTerminal() {
+        // A restart request when setup failed means "try setting up again",
+        // not just "recycle the session".
+        if piRoomConfiguration == nil || terminalSetupError != nil {
+            preparePiRoom()
+        }
         terminalSessionID = UUID()
     }
 
-    func createFilm(idea: String, title: String, duration: Int, parentDirectory: URL) {
-        perform("Creating the studio project…") { [filmToolExecutable, piExecutable] in
-            let client = FilmToolClient(executable: filmToolExecutable)
-            let pi = try PiExecutableResolver.resolve(piExecutable)
-            let run = try await client.plan(
-                idea: idea,
-                title: title,
-                durationSeconds: duration,
-                outputDirectory: parentDirectory,
-                piCommand: pi.path
-            )
-            await MainActor.run {
-                self.showCreateFilm = false
-                self.openProject(run)
-            }
-        }
-    }
-
-    func approve(gate: String) {
-        guard let run = snapshot?.runManifest else { return }
-        perform("Recording \(gate) approval…") { [filmToolExecutable] in
-            try await FilmToolClient(executable: filmToolExecutable).approve(
-                runManifest: run,
-                gate: gate,
-                note: "Explicitly approved in Mere Film Studio after reviewing the current evidence.",
-                approvedBy: NSFullUserName().isEmpty ? "macOS user" : NSFullUserName()
-            )
-        }
-    }
-
-    func advance() {
-        guard let run = snapshot?.runManifest else { return }
-        guard let piRoomConfiguration else {
-            errorMessage = StudioError.piRoomUnavailable.localizedDescription
-            return
-        }
-        perform("Pi and the studio are advancing the film…") { [filmToolExecutable] in
-            _ = try await FilmToolClient(executable: filmToolExecutable)
-                .advance(
-                    runManifest: run,
-                    piCommand: piRoomConfiguration.piExecutable.path,
-                    piProvider: "mere-run",
-                    piModel: piRoomConfiguration.model.id
-                )
-        }
-    }
-
-    func recover() {
-        guard let run = snapshot?.runManifest else { return }
-        perform("Recovering interrupted studio work…") { [filmToolExecutable] in
-            _ = try await FilmToolClient(executable: filmToolExecutable).recover(runManifest: run)
-        }
-    }
-
-    func review() {
-        guard let run = snapshot?.runManifest else { return }
-        guard let piRoomConfiguration else {
-            errorMessage = StudioError.piRoomUnavailable.localizedDescription
-            return
-        }
-        perform("Running technical and independent creative review…") { [filmToolExecutable] in
-            _ = try await FilmToolClient(executable: filmToolExecutable)
-                .review(
-                    runManifest: run,
-                    piCommand: piRoomConfiguration.piExecutable.path,
-                    piProvider: "mere-run",
-                    piModel: piRoomConfiguration.model.id
-                )
-        }
-    }
-
-    func reroll(shotID: String, note: String) {
-        guard let run = snapshot?.runManifest else { return }
-        perform("Preparing a targeted reroll…") { [filmToolExecutable] in
-            _ = try await FilmToolClient(executable: filmToolExecutable)
-                .reroll(runManifest: run, shotID: shotID, note: note)
-        }
-    }
-
-    func publishToAnimatic() {
-        guard let snapshot else { return }
-        perform("Verifying assets and publishing to Animatic…") { [filmToolExecutable, animaticExecutable] in
-            let output = snapshot.root.appending(path: "exports/animatic/film-animatic-handoff.json")
-            let export = try await FilmToolClient(executable: filmToolExecutable)
-                .exportAnimatic(runManifest: snapshot.runManifest, output: output)
-            let receipt = try await AnimaticClient(executable: animaticExecutable)
-                .importFilm(manifest: URL(fileURLWithPath: export.manifest))
-            await MainActor.run { self.handoffReceipt = receipt }
-        }
-    }
-
-    func validateAnimaticHandoff() {
-        guard let snapshot else { return }
-        perform("Verifying the complete Animatic handoff…") { [filmToolExecutable, animaticExecutable] in
-            let output = snapshot.root.appending(path: "exports/animatic/film-animatic-handoff.json")
-            let export = try await FilmToolClient(executable: filmToolExecutable)
-                .exportAnimatic(runManifest: snapshot.runManifest, output: output)
-            let receipt = try await AnimaticClient(executable: animaticExecutable)
-                .validateFilm(manifest: URL(fileURLWithPath: export.manifest))
-            await MainActor.run { self.handoffValidation = receipt }
-        }
-    }
-
-    private func perform(_ description: String, operation: @escaping @Sendable () async throws -> Void) {
-        guard !isBusy else { return }
-        isBusy = true
-        activity = description
-        errorMessage = nil
+    func cancelRunning() {
         commandTask?.cancel()
-        commandTask = Task {
-            do {
-                try await operation()
-                refresh()
-            } catch is CancellationError {
-                // A replacement task owns the activity indicator.
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-            isBusy = false
-            activity = ""
-        }
     }
-
-    static func shellEscape(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
-}
-
-private final class FilmWorkspaceWatcher {
-    private let descriptor: CInt
-    private let source: DispatchSourceFileSystemObject
-
-    init?(root: URL, onChange: @escaping @Sendable () -> Void) {
-        descriptor = open(root.path, O_EVTONLY)
-        guard descriptor >= 0 else { return nil }
-        source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: descriptor,
-            eventMask: [.write, .rename, .delete, .extend],
-            queue: DispatchQueue(label: "run.mere.filmstudio.project-watcher", qos: .utility)
-        )
-        source.setEventHandler(handler: onChange)
-        source.setCancelHandler { [descriptor] in close(descriptor) }
-        source.resume()
-    }
-
-    deinit { source.cancel() }
 }

@@ -1,3 +1,4 @@
+import FilmStudioCore
 import SwiftUI
 
 struct WelcomeView: View {
@@ -7,6 +8,33 @@ struct WelcomeView: View {
     var body: some View {
         HStack(spacing: 64) {
             VStack(alignment: .leading, spacing: 28) {
+                if let notice = studio.startupNotice {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Studio.accent)
+                        Text(notice)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(3)
+                        Spacer(minLength: 0)
+                        Button {
+                            studio.startupNotice = nil
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Dismiss notice")
+                    }
+                    .padding(14)
+                    .background(Studio.raised, in: RoundedRectangle(cornerRadius: Studio.radiusMedium, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Studio.radiusMedium, style: .continuous)
+                            .strokeBorder(Studio.accent.opacity(0.35))
+                    }
+                }
+
                 HStack(spacing: 10) {
                     Image(systemName: "camera.aperture")
                         .font(.system(size: 15, weight: .medium))
@@ -64,7 +92,7 @@ struct WelcomeView: View {
 /// Illustration of the pipeline — deliberately dimmed and static so it reads
 /// as a diagram, not live status.
 private struct GateCard: View {
-    private let gates = ["Brief", "Treatment", "Production", "Picture lock", "Delivery"]
+    private let gates = FilmGate.allCases.map(\.displayName)
 
     var body: some View {
         VStack(spacing: 28) {

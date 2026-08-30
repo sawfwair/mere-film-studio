@@ -42,3 +42,39 @@ startable model reported by `mere.run agent status`, then forwards the exact
 film-harness arguments through `mere.run agent start --inline`. Project
 manifests remain authoritative production state but cannot silently replace
 either executable used by the room.
+
+## 007 — Tolerant watcher refresh
+
+Watcher-driven project reloads swallow transient decode failures while a
+snapshot is already on screen. Production tools rewrite ledger JSON during
+long runs, and the file watcher fires mid-write; making those races loud
+would interrupt the operator with alerts about healthy projects. Explicit
+opens (menu, startup restore) still surface every error.
+
+## 008 — Unbounded advance and review, cancellable instead of timed out
+
+`advance` and `review` intentionally have no wall-clock timeout: legitimate
+multi-hour local renders would be killed by any sane limit. They are bounded
+by the human instead — the toolbar Cancel button (and ⌘.) terminates the
+child process via task cancellation. Auxiliary commands (`plan`, `approve`,
+Animatic import, agent status) do carry fixed timeouts because a hang there
+has no legitimate explanation. Do not add a default timeout to long-running
+commands; extend the timeout table only with evidence.
+
+## 009 — Local handoff verification before Animatic import
+
+Publishing to Animatic builds the handoff manifest in-process through
+`AnimaticHandoffBuilder`, which re-hashes every exported artifact against the
+ledger before writing it. The app deliberately does not trust the CLI's
+export step for verification: the studio's promise is that a manifest reaching
+Animatic describes bytes that provably match the accepted takes. Keep this
+ordering when touching the publish path.
+
+## 010 — Swift 6 language mode and complete concurrency in FilmStudioCore
+
+`Package.swift` pins `swiftLanguageModes: [.v6]`, and the FilmStudioCore
+Xcode target sets `SWIFT_STRICT_CONCURRENCY: complete`. The contracts module
+is where shared mutable-state reasoning lives, so it gets the strictest
+compiler enforcement available. Every `@unchecked Sendable` opt-out must
+carry an adjacent `// JUSTIFIED:` comment explaining the invariant that makes
+it safe.

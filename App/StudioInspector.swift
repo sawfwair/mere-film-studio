@@ -92,7 +92,7 @@ private struct ShotInspector: View {
 
     private var keyframe: URL? {
         snapshot.project.artifacts.last {
-            $0.kind == "shot-keyframe" && $0.path.hasSuffix("/\(shot.id).png")
+            $0.kind == .shotKeyframe && $0.path.hasSuffix("/\(shot.id).png")
         }.map(snapshot.artifactURL)
     }
 }
@@ -101,13 +101,17 @@ private struct InspectorField: View {
     let label: String
     let value: String?
 
+    private var resolvedValue: String? {
+        value.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
                 .fieldLabel()
-            Text(value?.isEmpty == false ? value! : "Not set")
+            Text(resolvedValue ?? "Not set")
                 .font(.callout)
-                .foregroundStyle(value?.isEmpty == false ? .primary : .tertiary)
+                .foregroundStyle(resolvedValue == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
                 .textSelection(.enabled)
         }
     }

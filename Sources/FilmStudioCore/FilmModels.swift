@@ -1,5 +1,30 @@
 import Foundation
 
+/// The five human gates of the film contract. Single source of truth for
+/// ordering and display names — UI code must derive gate rails, "next gate"
+/// pickers, and labels from here rather than restating the list.
+public enum FilmGate: String, CaseIterable, Sendable, Identifiable {
+    case brief
+    case treatment
+    case production
+    case pictureLock = "picture-lock"
+    case delivery
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .brief: "Brief"
+        case .treatment: "Treatment"
+        case .production: "Production"
+        case .pictureLock: "Picture lock"
+        case .delivery: "Delivery"
+        }
+    }
+}
+
+/// Immutable view of one film workspace on disk: the ledger plus the two
+/// optional planning documents the UI renders directly.
 public struct FilmWorkspaceSnapshot: Sendable, Equatable {
     public let root: URL
     public let runManifest: URL
@@ -21,18 +46,21 @@ public struct FilmWorkspaceSnapshot: Sendable, Equatable {
         self.treatment = treatment
     }
 
+    /// Resolves an artifact's recorded path against the project root.
     public func artifactURL(_ artifact: FilmArtifact) -> URL {
         artifact.path.hasPrefix("/")
             ? URL(fileURLWithPath: artifact.path)
             : root.appending(path: artifact.path)
     }
 
-    public func latestArtifact(kind: String) -> FilmArtifact? {
+    public func latestArtifact(kind: ArtifactKind) -> FilmArtifact? {
         project.artifacts.last { $0.kind == kind }
     }
 
+    /// The best playable cut, in descending order of authority. Missing files
+    /// are skipped so a stale ledger entry never breaks playback.
     public var playableCutURL: URL? {
-        for kind in ["delivery-master", "final-master", "rough-cut"] {
+        for kind in [ArtifactKind.deliveryMaster, .finalMaster, .roughCut] {
             if let artifact = latestArtifact(kind: kind) {
                 let url = artifactURL(artifact)
                 if FileManager.default.fileExists(atPath: url.path) { return url }
@@ -42,6 +70,9 @@ public struct FilmWorkspaceSnapshot: Sendable, Equatable {
     }
 }
 
+/// One film project as serialized in `film-project.json`. Field order and
+/// optionality mirror the wire contract; unknown contract statuses decode
+/// lossily (see `FilmContractStatus`).
 public struct FilmProject: Decodable, Sendable, Equatable {
     public let contractVersion: String
     public let projectId: String
@@ -49,7 +80,9 @@ public struct FilmProject: Decodable, Sendable, Equatable {
     public let idea: String
     public let createdAt: String
     public let updatedAt: String
-    public let status: String
+    public let status: FilmContractStatus
+    /// Free-form narrative phase from the tools (e.g. "development"); kept as
+    /// a raw string because the tools evolve phases independently of the app.
     public let phase: String
     public let brief: FilmBrief
     public let approvals: [String: FilmApproval]
@@ -69,7 +102,7 @@ public struct FilmProject: Decodable, Sendable, Equatable {
         idea: String,
         createdAt: String,
         updatedAt: String,
-        status: String,
+        status: FilmContractStatus,
         phase: String,
         brief: FilmBrief,
         approvals: [String: FilmApproval],
@@ -103,6 +136,9 @@ public struct FilmProject: Decodable, Sendable, Equatable {
     }
 }
 
+/// The creative brief. Decodes both wire shapes: the current nested form
+/// (`target`/`creative` sub-objects) and the legacy flat form, preferring
+/// nested values when both are present.
 public struct FilmBrief: Decodable, Sendable, Equatable {
     public let audience: String?
     public let genre: String?
@@ -199,7 +235,7 @@ public struct FilmBrief: Decodable, Sendable, Equatable {
 }
 
 public struct FilmApproval: Codable, Sendable, Equatable {
-    public let status: String
+    public let status: FilmContractStatus
     public let summary: String?
     public let requestedAt: String?
     public let approvedAt: String?
@@ -213,17 +249,22 @@ public struct FilmDepartmentTask: Codable, Sendable, Equatable, Identifiable {
     public let phase: String
     public let dependsOn: [String]
     public let synthesis: Bool
-    public let status: String
+    public let status: FilmContractStatus
     public let attempts: Int
 }
 
 public struct FilmShotState: Codable, Sendable, Equatable, Identifiable {
     public let id: String
-    public let status: String?
+    public let status: FilmContractStatus?
     public let take: Int?
     public let selectedCandidate: Int?
 
-    public init(id: String, status: String? = nil, take: Int? = nil, selectedCandidate: Int? = nil) {
+    public init(
+        id: String,
+        status: FilmContractStatus? = nil,
+        take: Int? = nil,
+        selectedCandidate: Int? = nil
+    ) {
         self.id = id
         self.status = status
         self.take = take
@@ -235,7 +276,7 @@ public struct FilmReviewRequest: Codable, Sendable, Equatable, Identifiable {
     public var id: String { "\(shotId):\(recordedAt)" }
     public let shotId: String
     public let note: String
-    public let status: String
+    public let status: FilmContractStatus
     public let recordedAt: String
     public let appliedAt: String?
     public let archivedTake: Int?
@@ -244,7 +285,7 @@ public struct FilmReviewRequest: Codable, Sendable, Equatable, Identifiable {
 public struct FilmJob: Codable, Sendable, Equatable, Identifiable {
     public let id: String
     public let kind: String?
-    public let status: String?
+    public let status: FilmContractStatus?
     public let shotId: String?
     public let error: String?
 }
@@ -276,7 +317,7 @@ public struct FilmArtifact: Codable, Sendable, Equatable, Identifiable {
     public let bytes: Int64
     public let contentType: String
     public let createdAt: String
-    public let kind: String
+    public let kind: ArtifactKind
     public let path: String
     public let sha256: String
     public let source: String
@@ -306,90 +347,4 @@ public struct FilmIssue: Codable, Sendable, Equatable, Identifiable {
     public let message: String
     public let blocking: Bool
     public let recordedAt: String?
-}
-
-public struct FilmTreatment: Codable, Sendable, Equatable {
-    public let title: String
-    public let logline: String
-    public let synopsis: String
-    public let theme: String
-    public let beats: [String]
-    public let visualLanguage: String
-    public let soundLanguage: String
-}
-
-public struct FilmProductionPlan: Codable, Sendable, Equatable {
-    public let contractVersion: String
-    public let projectId: String
-    public let title: String
-    public let createdAt: String
-    public let target: FilmTarget
-    public let scorePrompt: String
-    public let cast: [FilmCastMember]
-    public let locations: [FilmLocation]
-    public let shots: [FilmProductionShot]
-    public let plannedDurationSeconds: Double
-}
-
-public struct FilmTarget: Codable, Sendable, Equatable {
-    public let aspectRatio: String?
-    public let audience: String?
-    public let durationSeconds: Double?
-    public let fps: Int?
-    public let height: Int?
-    public let language: String?
-    public let platform: String?
-    public let rating: String?
-    public let usage: String?
-    public let width: Int?
-}
-
-public struct FilmCastMember: Codable, Sendable, Equatable, Identifiable {
-    public let id: String
-    public let name: String
-    public let visual: String
-    public let wardrobe: String
-    public let voice: String
-    public let seed: Int?
-}
-
-public struct FilmLocation: Codable, Sendable, Equatable, Identifiable {
-    public let id: String
-    public let name: String
-    public let visual: String
-    public let ambience: String
-    public let seed: Int?
-}
-
-public struct FilmProductionShot: Codable, Sendable, Equatable, Identifiable {
-    public let id: String
-    public let purpose: String
-    public let framePrompt: String
-    public let prompt: String
-    public let durationSeconds: Double
-    public let seed: Int
-    public let characters: [String]
-    public let location: String
-    public let dialogue: [FilmDialogueLine]
-    public let soundEffects: [FilmSoundEffect]
-    public let transition: String
-    public let status: String
-    public let take: Int
-    public let selectedCandidate: Int?
-    public let selectedSeed: Int?
-}
-
-public struct FilmDialogueLine: Codable, Sendable, Equatable {
-    public let speaker: String
-    public let text: String
-    public let startSeconds: Double
-    public let delivery: String
-}
-
-public struct FilmSoundEffect: Codable, Sendable, Equatable {
-    public let prompt: String
-    public let startSeconds: Double
-    public let durationSeconds: Double
-    public let levelDb: Double
-    public let seed: Int
 }
