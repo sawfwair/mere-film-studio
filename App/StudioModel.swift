@@ -61,7 +61,9 @@ struct PendingApproval: Identifiable {
 @MainActor
 final class StudioModel: ObservableObject {
     @Published var snapshot: FilmWorkspaceSnapshot?
-    @Published var section: StudioSection = .overview
+    @Published var section: StudioSection = .overview {
+        didSet { UserDefaults.standard.set(section.rawValue, forKey: "lastStudioSection") }
+    }
     @Published var terminalVisible = true
     @Published var inspectorVisible = true
     @Published var showCreateFilm = false
@@ -128,6 +130,10 @@ final class StudioModel: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: "recentFilms"),
            let decoded = try? JSONDecoder().decode([RecentFilm].self, from: data) {
             recentFilms = decoded
+        }
+        if let raw = UserDefaults.standard.string(forKey: "lastStudioSection"),
+           let restored = StudioSection(rawValue: raw) {
+            section = restored
         }
         let arguments = ProcessInfo.processInfo.arguments
         let argumentManifest = arguments.firstIndex(of: "--run-manifest").flatMap { index in
@@ -265,6 +271,11 @@ final class StudioModel: ObservableObject {
 
     func removeRecent(_ film: RecentFilm) {
         recentFilms.removeAll { $0.path == film.path }
+        persistRecents()
+    }
+
+    func clearRecents() {
+        recentFilms = []
         persistRecents()
     }
 

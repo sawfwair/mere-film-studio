@@ -23,8 +23,14 @@ struct MereFilmStudioApp: App {
                     ForEach(studio.recentFilms) { film in
                         Button(film.title) { studio.openProject(URL(fileURLWithPath: film.path)) }
                     }
+                    Divider()
+                    Button("Clear Menu") { studio.clearRecents() }
                 }
                 .disabled(studio.recentFilms.isEmpty)
+                Divider()
+                Button("Export Current Cut…") { studio.exportCurrentCut() }
+                    .keyboardShortcut("e")
+                    .disabled(studio.snapshot == nil || studio.isBusy)
             }
             CommandMenu("Production") {
                 Button("Refresh Project") { studio.refresh() }

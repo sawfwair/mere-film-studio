@@ -30,7 +30,7 @@ struct StudioRootView: View {
             ApprovalSheet(approval: approval)
                 .environmentObject(studio)
         }
-        .alert("Artifact check", isPresented: noticeBinding) {
+        .alert("Mere Film Studio", isPresented: noticeBinding) {
             Button("OK") { studio.noticeMessage = nil }
         } message: {
             Text(studio.noticeMessage ?? "")
