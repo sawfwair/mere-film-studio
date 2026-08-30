@@ -61,7 +61,7 @@ struct StudioOverview: View {
                 }
 
                 HStack(alignment: .top, spacing: 16) {
-                    DepartmentBoard(tasks: snapshot.project.departments)
+                    DepartmentBoard(tasks: snapshot.project.departments, root: snapshot.root)
                         .frame(maxWidth: .infinity)
                     NextMoveCard(snapshot: snapshot)
                         .frame(width: 310)
@@ -177,6 +177,7 @@ private struct NextMoveCard: View {
 
 private struct DepartmentBoard: View {
     let tasks: [FilmDepartmentTask]
+    let root: URL
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -200,6 +201,13 @@ private struct DepartmentBoard: View {
                     .padding(10)
                     .background(Studio.raised, in: RoundedRectangle(cornerRadius: Studio.radiusMedium, style: .continuous))
                     .help(help(for: task))
+                    .contextMenu {
+                        if let proposals = proposalsDirectory(for: task) {
+                            Button("Show \(StudioText.humanize(task.phase).lowercased()) proposals in Finder") {
+                                NSWorkspace.shared.activateFileViewerSelecting([proposals])
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -208,6 +216,15 @@ private struct DepartmentBoard: View {
 }
 
 extension DepartmentBoard {
+    /// Department drafts live under `proposals/<phase>/`.
+    fileprivate func proposalsDirectory(for task: FilmDepartmentTask) -> URL? {
+        let directory = root.appending(path: "proposals/\(task.phase)")
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return nil }
+        return directory
+    }
+
     /// The paper trail behind a department tile, on hover.
     fileprivate func help(for task: FilmDepartmentTask) -> String {
         var lines = ["\(StudioText.humanize(task.role)) — \(StudioText.status(task.status))"]

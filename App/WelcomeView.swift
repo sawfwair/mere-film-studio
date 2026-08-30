@@ -80,6 +80,22 @@ struct WelcomeView: View {
                 }
                 .entrance(appeared, delay: 0.24)
 
+                if !missingTools.isEmpty {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Studio.accent)
+                        Text("The studio can't find \(missingTools.formatted(.list(type: .and))). Point it at the installed tools before starting a film.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        SettingsLink {
+                            Text("Open Settings…")
+                        }
+                        .buttonStyle(StudioSecondaryButtonStyle())
+                    }
+                    .frame(maxWidth: 560, alignment: .leading)
+                    .entrance(appeared, delay: 0.26)
+                }
+
                 if !existingRecents.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Recent films")
@@ -105,6 +121,15 @@ struct WelcomeView: View {
     /// A film deleted from disk is gone; showing it would be a dead end.
     private var existingRecents: [RecentFilm] {
         studio.recentFilms.filter { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// Tools "Start a film" will need but the studio can't resolve today.
+    private var missingTools: [String] {
+        var missing: [String] = []
+        if (try? FilmToolClient.resolveExecutable(studio.filmToolExecutable)) == nil { missing.append("mere-film-tools") }
+        if (try? FilmToolClient.resolveExecutable(studio.mereRunExecutable)) == nil { missing.append("mere.run") }
+        if (try? PiExecutableResolver.resolve(studio.piExecutable)) == nil { missing.append("Pi") }
+        return missing
     }
 }
 

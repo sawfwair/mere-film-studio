@@ -10,57 +10,15 @@ struct ShotBoardView: View {
 
     var body: some View {
         if let shots = snapshot.productionPlan?.shots, !shots.isEmpty {
-            GeometryReader { geometry in
-                // Estimate the grid's live column count so arrow keys can move
-                // up/down between rows as well as left/right along a row.
-                let columnWidth: CGFloat = 316
-                let columns = max(1, Int((geometry.size.width - 48) / columnWidth))
-                // One pass over the ledger per render, not one scan per shot.
-                let keyframes = artifactIndex(kind: .shotKeyframe)
-                let clips = artifactIndex(kind: .shotClip)
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
-                        ForEach(Array(shots.enumerated()), id: \.element.id) { index, shot in
-                            let keyframe = keyframes[shot.id]
-                            let clip = clips[shot.id].map(snapshot.artifactURL)
-                            ShotCard(
-                                index: index,
-                                shot: shot,
-                                keyframe: keyframe.map(snapshot.artifactURL),
-                                keyframeRevision: keyframe?.sha256,
-                                clip: clip,
-                                flagged: flaggedShots.contains(shot.id),
-                                selected: studio.selectedShotID == shot.id
-                            ) {
-                                studio.selectedShotID = shot.id
-                            }
-                            .focused($focusedShotID, equals: shot.id)
-                            .onMoveCommand { direction in
-                                moveTo(direction, from: index, within: shots, columns: columns)
-                            }
-                            .contextMenu {
-                                if let clip {
-                                    Button("Open clip") { NSWorkspace.shared.open(clip) }
-                                }
-                                if let keyframe {
-                                    Button("Show keyframe in Finder") {
-                                        NSWorkspace.shared.activateFileViewerSelecting([snapshot.artifactURL(keyframe)])
-                                    }
-                                }
-                                Button("Copy motion prompt") {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(shot.prompt, forType: .string)
-                                }
-                                Divider()
-                                Button("Reroll…") {
-                                    studio.selectedShotID = shot.id
-                                    studio.inspectorVisible = true
-                                }
-                            }
-                        }
-                    }
-                    .padding(24)
-                }
+            // One pass over the ledger per render, not one scan per shot.
+            let keyframes = artifactIndex(kind: .shotKeyframe)
+            let clips = artifactIndex(kind: .shotClip)
+            VStack(spacing: 0) {
+                FilmTimeline(snapshot: snapshot, shots: shots, keyframes: keyframes)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 18)
+                    .padding(.bottom, 10)
+                shotGrid(shots: shots, keyframes: keyframes, clips: clips)
             }
             .onAppear { focusedShotID = studio.selectedShotID }
             .onChange(of: studio.selectedShotID) { _, newValue in
@@ -79,6 +37,62 @@ struct ShotBoardView: View {
                 detail: "Approve the treatment and preproduction will block the film shot by shot.",
                 symbol: "rectangle.stack"
             )
+        }
+    }
+
+    private func shotGrid(
+        shots: [FilmProductionShot],
+        keyframes: [String: FilmArtifact],
+        clips: [String: FilmArtifact]
+    ) -> some View {
+        GeometryReader { geometry in
+            // Estimate the grid's live column count so arrow keys can move
+            // up/down between rows as well as left/right along a row.
+            let columnWidth: CGFloat = 316
+            let columns = max(1, Int((geometry.size.width - 48) / columnWidth))
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
+                    ForEach(Array(shots.enumerated()), id: \.element.id) { index, shot in
+                        let keyframe = keyframes[shot.id]
+                        let clip = clips[shot.id].map(snapshot.artifactURL)
+                        ShotCard(
+                            index: index,
+                            shot: shot,
+                            keyframe: keyframe.map(snapshot.artifactURL),
+                            keyframeRevision: keyframe?.sha256,
+                            clip: clip,
+                            flagged: flaggedShots.contains(shot.id),
+                            selected: studio.selectedShotID == shot.id
+                        ) {
+                            studio.selectedShotID = shot.id
+                        }
+                        .focused($focusedShotID, equals: shot.id)
+                        .onMoveCommand { direction in
+                            moveTo(direction, from: index, within: shots, columns: columns)
+                        }
+                        .contextMenu {
+                            if let clip {
+                                Button("Open clip") { NSWorkspace.shared.open(clip) }
+                            }
+                            if let keyframe {
+                                Button("Show keyframe in Finder") {
+                                    NSWorkspace.shared.activateFileViewerSelecting([snapshot.artifactURL(keyframe)])
+                                }
+                            }
+                            Button("Copy motion prompt") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(shot.prompt, forType: .string)
+                            }
+                            Divider()
+                            Button("Reroll…") {
+                                studio.selectedShotID = shot.id
+                                studio.inspectorVisible = true
+                            }
+                        }
+                    }
+                }
+                .padding(24)
+            }
         }
     }
 
