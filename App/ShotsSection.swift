@@ -5,6 +5,8 @@ struct ShotBoardView: View {
     @EnvironmentObject private var studio: StudioModel
     let snapshot: FilmWorkspaceSnapshot
     @FocusState private var focusedShotID: String?
+    /// Shots the vision inspector flagged for human review.
+    @State private var flaggedShots: Set<String> = []
 
     var body: some View {
         if let shots = snapshot.productionPlan?.shots, !shots.isEmpty {
@@ -13,16 +15,21 @@ struct ShotBoardView: View {
                 // up/down between rows as well as left/right along a row.
                 let columnWidth: CGFloat = 316
                 let columns = max(1, Int((geometry.size.width - 48) / columnWidth))
+                // One pass over the ledger per render, not one scan per shot.
+                let keyframes = artifactIndex(kind: .shotKeyframe)
+                let clips = artifactIndex(kind: .shotClip)
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
                         ForEach(Array(shots.enumerated()), id: \.element.id) { index, shot in
-                            let keyframe = keyframeArtifact(for: shot.id)
+                            let keyframe = keyframes[shot.id]
+                            let clip = clips[shot.id].map(snapshot.artifactURL)
                             ShotCard(
                                 index: index,
                                 shot: shot,
                                 keyframe: keyframe.map(snapshot.artifactURL),
                                 keyframeRevision: keyframe?.sha256,
-                                clip: clip(for: shot.id),
+                                clip: clip,
+                                flagged: flaggedShots.contains(shot.id),
                                 selected: studio.selectedShotID == shot.id
                             ) {
                                 studio.selectedShotID = shot.id
@@ -32,7 +39,7 @@ struct ShotBoardView: View {
                                 moveTo(direction, from: index, within: shots, columns: columns)
                             }
                             .contextMenu {
-                                if let clip = clip(for: shot.id) {
+                                if let clip {
                                     Button("Open clip") { NSWorkspace.shared.open(clip) }
                                 }
                                 if let keyframe {
@@ -58,6 +65,13 @@ struct ShotBoardView: View {
             .onAppear { focusedShotID = studio.selectedShotID }
             .onChange(of: studio.selectedShotID) { _, newValue in
                 focusedShotID = newValue
+            }
+            .task(id: snapshot.latestArtifact(kind: .mediaInspection)?.sha256 ?? "") {
+                let snapshot = snapshot
+                let inspection = await Task.detached(priority: .utility) {
+                    ReviewFindingsLoader.mediaInspection(in: snapshot)
+                }.value
+                flaggedShots = Set(inspection?.shots.filter(\.flagged).map(\.shotId) ?? [])
             }
         } else {
             EmptyStage(
@@ -86,16 +100,14 @@ struct ShotBoardView: View {
         studio.selectedShotID = shots[target].id
     }
 
-    private func keyframeArtifact(for shotID: String) -> FilmArtifact? {
-        snapshot.project.artifacts.last {
-            $0.kind == .shotKeyframe && $0.path.hasSuffix("/\(shotID).png")
+    /// Latest artifact of `kind` per shot, keyed by the file's basename
+    /// (which the tools name after the shot id).
+    private func artifactIndex(kind: ArtifactKind) -> [String: FilmArtifact] {
+        var index: [String: FilmArtifact] = [:]
+        for artifact in snapshot.project.artifacts where artifact.kind == kind {
+            index[URL(fileURLWithPath: artifact.path).deletingPathExtension().lastPathComponent] = artifact
         }
-    }
-
-    private func clip(for shotID: String) -> URL? {
-        snapshot.project.artifacts.last {
-            $0.kind == .shotClip && $0.path.hasSuffix("/\(shotID).mp4")
-        }.map(snapshot.artifactURL)
+        return index
     }
 }
 
@@ -105,6 +117,7 @@ private struct ShotCard: View {
     let keyframe: URL?
     let keyframeRevision: String?
     let clip: URL?
+    let flagged: Bool
     let selected: Bool
     let select: () -> Void
 
@@ -118,6 +131,13 @@ private struct ShotCard: View {
             }
         }
         .buttonStyle(.plain)
+        // Drag the shot out to Finder or another app: the clip when one is
+        // rendered, otherwise the keyframe.
+        .onDrag {
+            guard let url = clip ?? keyframe,
+                  let provider = NSItemProvider(contentsOf: url) else { return NSItemProvider() }
+            return provider
+        }
         .background(Color.white.opacity(selected ? 0.09 : 0.05), in: RoundedRectangle(cornerRadius: Studio.radiusLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Studio.radiusLarge, style: .continuous)
@@ -154,6 +174,13 @@ private struct ShotCard: View {
                 Text(String(format: "SHOT %02d", index + 1))
                     .timecodeStyle()
                     .foregroundStyle(.white.opacity(0.9))
+                if flagged {
+                    Image(systemName: "eye.trianglebadge.exclamationmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Studio.accent)
+                        .help("The vision inspector flagged this shot for review")
+                        .accessibilityLabel("Flagged by vision inspection")
+                }
                 Spacer()
                 if clip != nil {
                     Image(systemName: "play.fill")

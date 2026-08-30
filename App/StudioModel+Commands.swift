@@ -147,6 +147,55 @@ extension StudioModel {
         }
     }
 
+    /// Re-hashes the newest ledger entry for every artifact path against the
+    /// bytes on disk — the on-demand version of the product's promise that
+    /// approved files can't change quietly.
+    func verifyArtifacts() {
+        guard let snapshot else { return }
+        perform("Re-hashing every artifact against the ledger…") {
+            let (checked, problems) = try await Task.detached(priority: .userInitiated) {
+                try Self.artifactProblems(in: snapshot)
+            }.value
+            await MainActor.run {
+                guard self.snapshot?.runManifest == snapshot.runManifest else { return }
+                if problems.isEmpty {
+                    self.noticeMessage = "All \(checked) artifacts match their recorded hashes."
+                } else {
+                    self.noticeMessage = Self.presentableText(
+                        "\(problems.count) of \(checked) artifacts don't match the ledger:\n"
+                            + problems.joined(separator: "\n")
+                    )
+                }
+            }
+        }
+    }
+
+    private nonisolated static func artifactProblems(
+        in snapshot: FilmWorkspaceSnapshot
+    ) throws -> (checked: Int, problems: [String]) {
+        // Older entries for a re-recorded path are history, not the current
+        // claim; only the newest entry per path is expected to match disk.
+        var seen = Set<String>()
+        let current = snapshot.project.artifacts.reversed().filter { seen.insert($0.path).inserted }.reversed()
+        var problems: [String] = []
+        for artifact in current {
+            try Task.checkCancellation()
+            let url = snapshot.artifactURL(artifact)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                problems.append("Missing: \(artifact.path)")
+                continue
+            }
+            guard let actual = try? AnimaticHandoffBuilder.sha256(file: url) else {
+                problems.append("Unreadable: \(artifact.path)")
+                continue
+            }
+            if actual != artifact.sha256 {
+                problems.append("Changed since recorded: \(artifact.path)")
+            }
+        }
+        return (current.count, problems)
+    }
+
     private static func writeVerifiedHandoff(snapshot: FilmWorkspaceSnapshot) async throws -> URL {
         let output = snapshot.root.appending(path: "exports/animatic/film-animatic-handoff.json")
         return try await Task.detached(priority: .userInitiated) {

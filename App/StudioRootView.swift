@@ -30,6 +30,11 @@ struct StudioRootView: View {
             ApprovalSheet(approval: approval)
                 .environmentObject(studio)
         }
+        .alert("Artifact check", isPresented: noticeBinding) {
+            Button("OK") { studio.noticeMessage = nil }
+        } message: {
+            Text(studio.noticeMessage ?? "")
+        }
         .alert("Couldn’t complete that", isPresented: errorBinding) {
             Button("Copy Details") {
                 NSPasteboard.general.clearContents()
@@ -39,6 +44,13 @@ struct StudioRootView: View {
         } message: {
             Text(studio.errorMessage ?? "Unknown error")
         }
+    }
+
+    private var noticeBinding: Binding<Bool> {
+        Binding(
+            get: { studio.noticeMessage != nil },
+            set: { if !$0 { studio.noticeMessage = nil } }
+        )
     }
 
     private var errorBinding: Binding<Bool> {

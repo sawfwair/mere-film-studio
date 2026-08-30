@@ -17,9 +17,15 @@ struct StudioOverview: View {
                             .tracking(-0.3)
                             .lineLimit(4)
                         if !snapshot.project.brief.openQuestions.isEmpty {
-                            Label(openQuestionsLabel, systemImage: "bubble.left.and.exclamationmark.bubble.right")
-                                .font(.callout)
-                                .foregroundStyle(Studio.accent)
+                            Button {
+                                studio.inspectorVisible = true
+                            } label: {
+                                Label(openQuestionsLabel, systemImage: "bubble.left.and.exclamationmark.bubble.right")
+                                    .font(.callout)
+                                    .foregroundStyle(Studio.accent)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Read the questions in the inspector")
                         }
                     }
                     Spacer()
@@ -193,10 +199,24 @@ private struct DepartmentBoard: View {
                     }
                     .padding(10)
                     .background(Studio.raised, in: RoundedRectangle(cornerRadius: Studio.radiusMedium, style: .continuous))
+                    .help(help(for: task))
                 }
             }
         }
         .studioPanel()
+    }
+}
+
+extension DepartmentBoard {
+    /// The paper trail behind a department tile, on hover.
+    fileprivate func help(for task: FilmDepartmentTask) -> String {
+        var lines = ["\(StudioText.humanize(task.role)) — \(StudioText.status(task.status))"]
+        if task.attempts > 1 { lines.append("\(task.attempts) attempts") }
+        if !task.dependsOn.isEmpty {
+            lines.append("Builds on " + task.dependsOn.map(StudioText.humanize).joined(separator: ", "))
+        }
+        if task.synthesis { lines.append("Synthesizes the department drafts") }
+        return lines.joined(separator: "\n")
     }
 }
 

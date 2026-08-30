@@ -203,6 +203,7 @@ private struct SidebarRow: View {
 }
 
 private struct SidebarHealthRow: View {
+    @EnvironmentObject private var studio: StudioModel
     let snapshot: FilmWorkspaceSnapshot
     let watchingFiles: Bool
 
@@ -211,22 +212,31 @@ private struct SidebarHealthRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: blocked ? "exclamationmark.triangle.fill" : "checkmark.shield.fill")
-                .foregroundStyle(blocked ? Studio.fail : Studio.pass)
-            VStack(alignment: .leading, spacing: 1) {
-                // "No blocking issues", not "healthy": loading only reads the
-                // ledger; it does not re-verify files on disk.
-                Text(blocked ? "Action needed" : "No blocking issues")
-                    .font(.caption.weight(.semibold))
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+        Button {
+            studio.verifyArtifacts()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: blocked ? "exclamationmark.triangle.fill" : "checkmark.shield.fill")
+                    .foregroundStyle(blocked ? Studio.fail : Studio.pass)
+                VStack(alignment: .leading, spacing: 1) {
+                    // "No blocking issues", not "healthy": loading only reads
+                    // the ledger; it does not re-verify files on disk.
+                    Text(blocked ? "Action needed" : "No blocking issues")
+                        .font(.caption.weight(.semibold))
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            .padding(12)
+            .contentShape(Rectangle())
         }
-        .padding(12)
+        .buttonStyle(.plain)
+        .disabled(studio.isBusy)
         .background(.black.opacity(0.18))
+        .help("Re-hash every artifact against the ledger")
+        .accessibilityLabel("Verify artifacts against the ledger")
     }
 
     private var subtitle: String {
