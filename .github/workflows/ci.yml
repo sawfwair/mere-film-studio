@@ -65,9 +65,12 @@ jobs:
         timeout-minutes: 10
         run: swiftlint lint --strict --quiet --config .swiftlint.yml
 
+      # Every test here uses swift-testing; the XCTest harness leg that
+      # `swift test` still spawns has hung indefinitely on runner Xcodes
+      # (zero output after "Build complete!"), so skip it outright.
       - name: Package tests
         timeout-minutes: 20
-        run: swift test --enable-code-coverage --verbose
+        run: swift test --disable-xctest --enable-code-coverage --verbose
 
       - name: Build application
         timeout-minutes: 40
