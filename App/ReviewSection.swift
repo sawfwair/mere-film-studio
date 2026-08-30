@@ -5,13 +5,24 @@ import SwiftUI
 struct ReviewView: View {
     @EnvironmentObject private var studio: StudioModel
     let snapshot: FilmWorkspaceSnapshot
+    @State private var inspection: FilmMediaInspection?
+    @State private var qc: FilmTechnicalQC?
+
+    /// Reload only when the underlying evidence documents actually change.
+    private var findingsRevision: String {
+        let mi = snapshot.latestArtifact(kind: .mediaInspection)?.sha256 ?? ""
+        let tr = snapshot.latestArtifact(kind: .technicalReview)?.sha256 ?? ""
+        return "\(mi)|\(tr)"
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 if let cut = snapshot.playableCut {
                     NativePlayer(url: snapshot.artifactURL(cut), revision: cut.sha256)
-                        .frame(minHeight: 390)
+                        // Capped so a large window never pushes the evidence
+                        // panels below the fold: the review IS the evidence.
+                        .frame(minHeight: 390, maxHeight: 540)
                         .clipShape(RoundedRectangle(cornerRadius: Studio.radiusLarge, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: Studio.radiusLarge, style: .continuous)
@@ -58,7 +69,7 @@ struct ReviewView: View {
                     .studioPanel()
                 }
 
-                FindingsPanels(snapshot: snapshot)
+                FindingsPanels(snapshot: snapshot, inspection: inspection, qc: qc)
 
                 if !pendingRequests.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
@@ -85,6 +96,19 @@ struct ReviewView: View {
             }
             .padding(24)
         }
+        // Loaded here, not inside FindingsPanels: a task attached to a view
+        // that renders nothing until the load finishes would never run.
+        .task(id: findingsRevision) {
+            let snapshot = snapshot
+            let loaded = await Task.detached(priority: .utility) {
+                (
+                    ReviewFindingsLoader.mediaInspection(in: snapshot),
+                    ReviewFindingsLoader.technicalQC(in: snapshot)
+                )
+            }.value
+            inspection = loaded.0
+            qc = loaded.1
+        }
     }
 
     /// Requests the tools have already applied keep their history in the
@@ -104,46 +128,26 @@ struct ReviewView: View {
 /// technical QC checks, decoded from the documents the ledger points at.
 private struct FindingsPanels: View {
     let snapshot: FilmWorkspaceSnapshot
-    @State private var inspection: FilmMediaInspection?
-    @State private var qc: FilmTechnicalQC?
-
-    /// Reload only when the underlying evidence documents actually change.
-    private var revisionKey: String {
-        let mi = snapshot.latestArtifact(kind: .mediaInspection)?.sha256 ?? ""
-        let tr = snapshot.latestArtifact(kind: .technicalReview)?.sha256 ?? ""
-        return "\(mi)|\(tr)"
-    }
+    let inspection: FilmMediaInspection?
+    let qc: FilmTechnicalQC?
 
     var body: some View {
-        Group {
-            if inspection != nil || qc != nil {
-                HStack(alignment: .top, spacing: 16) {
-                    if let inspection {
-                        VisionInspectionPanel(snapshot: snapshot, inspection: inspection)
-                            .frame(maxWidth: .infinity)
-                    }
-                    if let qc {
-                        if inspection == nil {
-                            TechnicalQCPanel(qc: qc)
-                                .frame(maxWidth: .infinity, alignment: .topLeading)
-                        } else {
-                            TechnicalQCPanel(qc: qc)
-                                .frame(width: 320)
-                        }
+        if inspection != nil || qc != nil {
+            HStack(alignment: .top, spacing: 16) {
+                if let inspection {
+                    VisionInspectionPanel(snapshot: snapshot, inspection: inspection)
+                        .frame(maxWidth: .infinity)
+                }
+                if let qc {
+                    if inspection == nil {
+                        TechnicalQCPanel(qc: qc)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                    } else {
+                        TechnicalQCPanel(qc: qc)
+                            .frame(width: 320)
                     }
                 }
             }
-        }
-        .task(id: revisionKey) {
-            let snapshot = snapshot
-            let loaded = await Task.detached(priority: .utility) {
-                (
-                    ReviewFindingsLoader.mediaInspection(in: snapshot),
-                    ReviewFindingsLoader.technicalQC(in: snapshot)
-                )
-            }.value
-            inspection = loaded.0
-            qc = loaded.1
         }
     }
 }

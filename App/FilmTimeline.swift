@@ -9,6 +9,9 @@ struct FilmTimeline: View {
     let snapshot: FilmWorkspaceSnapshot
     let shots: [FilmProductionShot]
     let keyframes: [String: FilmArtifact]
+    /// When the board is filtered, the timeline stays a map of the whole
+    /// film; blocks outside the filter dim instead of disappearing.
+    var matching: Set<String>?
 
     private var totalSeconds: Double {
         max(shots.reduce(0) { $0 + $1.durationSeconds }, 0.1)
@@ -39,6 +42,7 @@ struct FilmTimeline: View {
                             studio.selectedShotID = shot.id
                         }
                         .frame(width: max(available * shot.durationSeconds / totalSeconds, 26))
+                        .opacity(matching == nil || matching?.contains(shot.id) == true ? 1 : 0.3)
                     }
                 }
             }

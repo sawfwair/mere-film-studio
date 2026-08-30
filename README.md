@@ -55,9 +55,9 @@ Every department is an agent with a job, a status, and a paper trail.
 | | |
 |---|---|
 | <img src=".github/assets/shots.jpg" alt="Shot board"> | <img src=".github/assets/development.jpg" alt="Development"> |
-| **Shot board.** Keyframes, takes, and transitions — hover a shot to preview its clip, right-click to reroll. | **Development.** Treatment, story beats, and the cast and location references the whole crew works from. |
+| **Shot board.** The whole film as a timeline, then shot by shot — hover to preview a clip, press Space to Quick Look it, right-click to reroll. | **Development.** Treatment, story beats, and the cast and location references the whole crew works from. |
 | <img src=".github/assets/review.jpg" alt="Review"> | <img src=".github/assets/delivery.jpg" alt="Delivery"> |
-| **Review.** The checks gather the evidence. You watch the cut and make the final call. | **Delivery.** All ten checks passed: the finished film, its receipts, and a verified push to Animatic. |
+| **Review.** The evidence, readable in place: per-shot vision verdicts, technical QC, and loudness. You watch the cut and make the final call. | **Delivery.** All ten checks passed: the finished film, its receipts, and a verified push to Animatic. |
 
 ## Ten checks before it ships
 
@@ -73,6 +73,8 @@ GRACE will not call a film finished until all ten pass:
 - A second opinion on the cut from independent critic agents
 - You signed off on it, and that decision is recorded
 - Shipped files match approved files, byte for byte (SHA-256)
+
+Each passed check opens its receipt in the app, and you can re-hash every file against the ledger whenever you like.
 
 ## Everything runs on your Mac
 
