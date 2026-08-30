@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src=".github/assets/studio.jpg" width="840" alt="The GRACE studio overview: proof dial, department board, and the next approval waiting for you">
+  <img src=".github/assets/studio.jpg" width="840" alt="The GRACE studio overview: the film in production, live render activity, the proof dial, and Pi in the room">
 </p>
 
 GRACE is a multi-agent film studio that runs entirely on your Mac. You give it one sentence. A lead producer agent, running on Pi, builds a crew of specialist agents that write, plan, shoot, voice, and score a short film using local `mere.run` models. The production stops at five points and waits for your sign-off. Nothing ships without you.
@@ -57,7 +57,7 @@ Every department is an agent with a job, a status, and a paper trail.
 | <img src=".github/assets/shots.jpg" alt="Shot board"> | <img src=".github/assets/development.jpg" alt="Development"> |
 | **Shot board.** The whole film as a timeline, then shot by shot — hover to preview a clip, press Space to Quick Look it, right-click to reroll. | **Development.** Treatment, story beats, and the cast and location references the whole crew works from. |
 | <img src=".github/assets/review.jpg" alt="Review"> | <img src=".github/assets/delivery.jpg" alt="Delivery"> |
-| **Review.** The evidence, readable in place: per-shot vision verdicts, technical QC, and loudness. You watch the cut and make the final call. | **Delivery.** All ten checks passed: the finished film, its receipts, and a verified push to Animatic. |
+| **Review.** The evidence, readable in place: per-shot vision verdicts, technical QC, and loudness. You watch the cut and make the final call. | **Delivery.** The film locks when every check passes: a receipt for each one, and a verified push to Animatic. |
 
 ## Ten checks before it ships
 
