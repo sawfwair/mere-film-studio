@@ -40,6 +40,8 @@ struct MereFilmStudioApp: App {
                 Button("Run Studio Review") { studio.review() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                     .disabled(studio.snapshot == nil || studio.isBusy)
+                Button("Verify Artifacts") { studio.verifyArtifacts() }
+                    .disabled(studio.snapshot == nil || studio.isBusy)
                 Button("Cancel Running Command") { studio.cancelRunning() }
                     .keyboardShortcut(".", modifiers: .command)
                     .disabled(!studio.isBusy)

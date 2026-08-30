@@ -69,6 +69,8 @@ final class StudioModel: ObservableObject {
     @Published var activity = ""
     @Published var errorMessage: String?
     @Published var fullErrorDetails: String?
+    /// Non-error result the human asked for (e.g. an artifact check).
+    @Published var noticeMessage: String?
     @Published var startupNotice: String?
     @Published var handoffReceipt: AnimaticImportReceipt?
     @Published var handoffValidation: AnimaticImportReceipt?

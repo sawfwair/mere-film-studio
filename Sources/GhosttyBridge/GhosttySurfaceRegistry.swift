@@ -17,6 +17,9 @@ final class GhosttySurfaceRegistry {
     private var entries: [UInt: Entry] = [:]
 
     func register(_ view: GhosttySurfaceView) {
+        // Sweep entries whose views have deallocated so restarts don't
+        // accumulate dead slots for the life of the app.
+        entries = entries.filter { $0.value.view != nil }
         entries[UInt(bitPattern: Unmanaged.passUnretained(view).toOpaque())] = Entry(view)
     }
 
