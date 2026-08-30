@@ -239,7 +239,7 @@ private struct ArchivedTakeRow: View {
 
     var body: some View {
         Button {
-            NSWorkspace.shared.open(take.url)
+            StudioAppDelegate.preview([take.url])
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: take.label == "Clip" ? "film" : "photo")
@@ -256,7 +256,7 @@ private struct ArchivedTakeRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Open the archived file")
+        .help("Quick Look the archived take")
     }
 }
 

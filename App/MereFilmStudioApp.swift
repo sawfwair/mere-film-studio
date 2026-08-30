@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct MereFilmStudioApp: App {
+    @NSApplicationDelegateAdaptor(StudioAppDelegate.self) private var appDelegate
     @StateObject private var studio = StudioModel()
 
     var body: some Scene {

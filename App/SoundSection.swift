@@ -4,6 +4,7 @@ import SwiftUI
 struct SoundView: View {
     let snapshot: FilmWorkspaceSnapshot
     @StateObject private var preview = AudioPreview()
+    @State private var captions: [CaptionCue] = []
 
     var body: some View {
         ScrollView {
@@ -27,6 +28,39 @@ struct SoundView: View {
                         }
                     }
                     .studioPanel()
+
+                    if !captions.isEmpty, let source = captionFile {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("Captions")
+                                    .panelTitle()
+                                Spacer()
+                                Text("\(captions.count) cue\(captions.count == 1 ? "" : "s")")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                            ForEach(captions) { cue in
+                                HStack(alignment: .top, spacing: 12) {
+                                    Text(Studio.timecode(cue.startSeconds))
+                                        .timecodeStyle()
+                                        .foregroundStyle(Studio.accent)
+                                    Text(cue.text)
+                                        .font(.callout)
+                                        .foregroundStyle(.secondary)
+                                        .textSelection(.enabled)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Spacer(minLength: 0)
+                                }
+                            }
+                        }
+                        .studioPanel()
+                        .contextMenu {
+                            Button("Show caption file in Finder") {
+                                NSWorkspace.shared.activateFileViewerSelecting([source])
+                            }
+                        }
+                    }
 
                     if !audioTakes.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
@@ -84,6 +118,34 @@ struct SoundView: View {
             .padding(24)
         }
         .onDisappear { preview.stop() }
+        .task(id: captionFile?.path ?? "") {
+            guard let captionFile else {
+                captions = []
+                return
+            }
+            let cues = await Task.detached(priority: .utility) {
+                CaptionParser.load(from: captionFile)
+            }.value
+            captions = cues
+        }
+    }
+
+    /// The newest caption sidecar: from the ledger when recorded, otherwise
+    /// the conventional captions/ directory.
+    private var captionFile: URL? {
+        for kind in [ArtifactKind.subtitleVtt, .subtitleSrt] {
+            if let artifact = snapshot.latestArtifact(kind: kind) {
+                let url = snapshot.artifactURL(artifact)
+                if FileManager.default.fileExists(atPath: url.path) { return url }
+            }
+        }
+        let directory = snapshot.root.appending(path: "captions")
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        return files.first { ["vtt", "srt"].contains($0.pathExtension.lowercased()) }
     }
 
     /// Every rendered piece of audio the ledger knows about, score first.
