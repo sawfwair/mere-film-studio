@@ -1,6 +1,7 @@
 import AppKit
 import FilmStudioCore
 import Foundation
+import UniformTypeIdentifiers
 
 // MARK: - Film operations
 
@@ -143,6 +144,35 @@ extension StudioModel {
                 if self.snapshot?.runManifest == snapshot.runManifest {
                     self.handoffValidation = receipt
                 }
+            }
+        }
+    }
+
+    /// Copies the best playable cut wherever the human wants it, without a
+    /// trip through Finder.
+    func exportCurrentCut() {
+        guard let snapshot, let cut = snapshot.playableCut else {
+            errorMessage = "There is no playable cut to export yet."
+            fullErrorDetails = nil
+            return
+        }
+        let source = snapshot.artifactURL(cut)
+        let panel = NSSavePanel()
+        panel.title = "Export the current cut"
+        panel.nameFieldStringValue = "\(snapshot.project.title).mp4"
+        panel.allowedContentTypes = [.mpeg4Movie]
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+        perform("Exporting the current cut…") {
+            try await Task.detached(priority: .userInitiated) {
+                // The save panel already asked about replacing.
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.removeItem(at: destination)
+                }
+                try FileManager.default.copyItem(at: source, to: destination)
+            }.value
+            await MainActor.run {
+                guard self.snapshot?.runManifest == snapshot.runManifest else { return }
+                self.noticeMessage = "Exported the cut to \(destination.path)."
             }
         }
     }

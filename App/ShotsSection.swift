@@ -70,6 +70,13 @@ struct ShotBoardView: View {
                         .onMoveCommand { direction in
                             moveTo(direction, from: index, within: shots, columns: columns)
                         }
+                        // Space previews the focused shot's clip, the way
+                        // Finder previews a file.
+                        .onKeyPress(.space) {
+                            guard let clip else { return .ignored }
+                            NSWorkspace.shared.open(clip)
+                            return .handled
+                        }
                         .contextMenu {
                             if let clip {
                                 Button("Open clip") { NSWorkspace.shared.open(clip) }

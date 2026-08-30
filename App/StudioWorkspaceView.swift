@@ -113,6 +113,9 @@ private struct WorkspaceToolbar: ToolbarContent {
                 Button("Reveal project in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([snapshot.runManifest])
                 }
+                Button("Reveal logs in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([snapshot.root.appending(path: "logs")])
+                }
                 Divider()
                 Button("Close project") { studio.closeProject() }
             } label: {
