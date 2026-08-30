@@ -60,7 +60,7 @@
     <figure class="shot">
       <img
         src="/assets/studio.jpg"
-        alt="The GRACE studio overview: proof dial, department board, and the next human gate"
+        alt="The GRACE studio overview: the film in production, live render activity, the proof dial, and Pi in the room"
         loading="eager"
       />
     </figure>
@@ -178,8 +178,8 @@
           />
         </div>
         <figcaption>
-          <b>Shot board.</b> Keyframes, takes, and transitions — hover a shot to preview its clip, right-click
-          to reroll.
+          <b>Shot board.</b> The whole film as a timeline, then shot by shot — hover to preview a clip,
+          press Space to Quick Look it, right-click to reroll.
         </figcaption>
       </figure>
       <figure class="screen">
@@ -199,12 +199,13 @@
         <div class="shot">
           <img
             src="/assets/review.jpg"
-            alt="Review screen with the proof checklist and studio review action"
+            alt="Review screen with the proof checklist and per-shot vision findings"
             loading="lazy"
           />
         </div>
         <figcaption>
-          <b>Review.</b> The checks gather the evidence. You watch the cut and make the final call.
+          <b>Review.</b> The evidence, readable in place: per-shot vision verdicts, technical QC, and
+          loudness. You watch the cut and make the final call.
         </figcaption>
       </figure>
       <figure class="screen">
@@ -216,8 +217,8 @@
           />
         </div>
         <figcaption>
-          <b>Delivery.</b> All ten checks passed: the finished film, its receipts, and a verified
-          push to Animatic.
+          <b>Delivery.</b> The film locks when every check passes: a receipt for each one, and a
+          verified push to Animatic.
         </figcaption>
       </figure>
     </div>
