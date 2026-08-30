@@ -68,6 +68,7 @@ public enum AnimaticHandoffError: LocalizedError, Equatable {
     case unsafeArtifactPath(String)
     case missingArtifact(String)
     case hashMismatch(path: String, expected: String, actual: String)
+    case sizeMismatch(path: String, expected: Int64, actual: Int64)
 
     public var errorDescription: String? {
         switch self {
@@ -76,6 +77,8 @@ public enum AnimaticHandoffError: LocalizedError, Equatable {
         case .missingArtifact(let path): "The handoff artifact is missing: \(path)"
         case .hashMismatch(let path, let expected, let actual):
             "Artifact hash mismatch for \(path). Expected \(expected), got \(actual)."
+        case .sizeMismatch(let path, let expected, let actual):
+            "Artifact size mismatch for \(path). The ledger records \(expected) bytes, the file has \(actual)."
         }
     }
 }
@@ -132,7 +135,10 @@ public enum AnimaticHandoffBuilder {
                 logline: snapshot.treatment?.logline,
                 synopsis: snapshot.treatment?.synopsis,
                 theme: snapshot.treatment?.theme,
-                durationMilliseconds: Int((plan.plannedDurationSeconds * 1_000).rounded()),
+                // The cursor is the sum of the per-shot roundings; deriving
+                // the total from plannedDurationSeconds independently could
+                // disagree with the timeline by a few milliseconds.
+                durationMilliseconds: cursor,
                 fps: plan.target.fps ?? 24,
                 aspectRatio: plan.target.aspectRatio ?? "16:9",
                 width: plan.target.width,
@@ -147,8 +153,13 @@ public enum AnimaticHandoffBuilder {
     }
 
     private static func verifiedAssets(in snapshot: FilmWorkspaceSnapshot) throws -> [AnimaticHandoffAsset] {
-        try snapshot.project.artifacts
-            .filter { ArtifactKind.exportable.contains($0.kind) }
+        // Rerolls and resumed runs can append a second ledger entry for the
+        // same path; only the newest one can still match the bytes on disk,
+        // and downstream lookups key assets by path.
+        let exportable = snapshot.project.artifacts.filter { ArtifactKind.exportable.contains($0.kind) }
+        var seen = Set<String>()
+        let latestPerPath = Array(exportable.reversed().filter { seen.insert($0.path).inserted }.reversed())
+        return try latestPerPath
             .map { artifact in
                 try validate(artifact: artifact, in: snapshot)
                 return AnimaticHandoffAsset(
@@ -198,6 +209,10 @@ public enum AnimaticHandoffBuilder {
         }
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw AnimaticHandoffError.missingArtifact(artifact.path)
+        }
+        let actualBytes = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? nil
+        if let actualBytes, actualBytes != artifact.bytes {
+            throw AnimaticHandoffError.sizeMismatch(path: artifact.path, expected: artifact.bytes, actual: actualBytes)
         }
         let actual = try sha256(file: url)
         guard actual == artifact.sha256 else {

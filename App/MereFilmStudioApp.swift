@@ -19,6 +19,12 @@ struct MereFilmStudioApp: App {
                     .keyboardShortcut("n")
                 Button("Open Film…") { studio.chooseProject() }
                     .keyboardShortcut("o")
+                Menu("Open Recent") {
+                    ForEach(studio.recentFilms) { film in
+                        Button(film.title) { studio.openProject(URL(fileURLWithPath: film.path)) }
+                    }
+                }
+                .disabled(studio.recentFilms.isEmpty)
             }
             CommandMenu("Production") {
                 Button("Refresh Project") { studio.refresh() }

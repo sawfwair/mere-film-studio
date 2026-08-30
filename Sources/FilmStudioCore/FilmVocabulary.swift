@@ -100,6 +100,7 @@ extension FilmContractStatus: CustomStringConvertible {
 extension FilmContractStatus {
     public static let pending = FilmContractStatus(rawValue: "pending")
     public static let approved = FilmContractStatus(rawValue: "approved")
+    public static let planned = FilmContractStatus(rawValue: "planned")
     public static let running = FilmContractStatus(rawValue: "running")
     public static let ready = FilmContractStatus(rawValue: "ready")
     public static let failed = FilmContractStatus(rawValue: "failed")

@@ -39,7 +39,7 @@ struct GateRail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(FilmGate.allCases) { gate in
-                GateRow(name: gate.displayName, status: approvals[gate.rawValue]?.status)
+                GateRow(name: gate.displayName, approval: approvals[gate.rawValue])
             }
         }
         .animation(.spring(duration: 0.45), value: statuses)
@@ -52,7 +52,9 @@ struct GateRail: View {
 
 private struct GateRow: View {
     let name: String
-    let status: FilmContractStatus?
+    let approval: FilmApproval?
+
+    private var status: FilmContractStatus? { approval?.status }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -74,6 +76,20 @@ private struct GateRow: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, 3)
+        .help(provenance)
+    }
+
+    /// The ledger records who approved what and when; surface it on hover so
+    /// the rail is a receipt, not just a status light.
+    private var provenance: String {
+        guard let approval else { return "\(name) — upcoming" }
+        var lines: [String] = []
+        if status == .approved, let by = approval.approvedBy {
+            lines.append("Approved by \(by)\(approval.approvedAt.map { " · \($0)" } ?? "")")
+        }
+        if let note = approval.note, !note.isEmpty { lines.append(note) }
+        if lines.isEmpty, let summary = approval.summary, !summary.isEmpty { lines.append(summary) }
+        return lines.isEmpty ? "\(name) — \(statusLabel.lowercased())" : lines.joined(separator: "\n")
     }
 
     private var statusLabel: String {
@@ -92,90 +108,6 @@ private struct GateRow: View {
         if status == .approved { return Studio.pass }
         if status == .pending { return Studio.accent }
         return .secondary
-    }
-}
-
-// MARK: - Proof dial
-
-struct ProofDial: View {
-    let completed: Int
-    let total: Int
-
-    init(proof: FilmProof) {
-        completed = proof.completedCount
-        total = ProofChecklist.rows(proof).count
-    }
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Color.white.opacity(0.07), lineWidth: 7)
-            Circle()
-                .trim(from: 0, to: total == 0 ? 0 : Double(completed) / Double(total))
-                .stroke(
-                    isComplete ? Studio.pass : Studio.accent,
-                    style: StrokeStyle(lineWidth: 7, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-            VStack(spacing: 2) {
-                Text("\(completed)")
-                    .font(.system(size: 28, weight: .semibold))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                Text("of \(total)")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .frame(width: 104, height: 104)
-        .animation(.spring(duration: 0.7), value: completed)
-    }
-
-    private var isComplete: Bool {
-        total > 0 && completed >= total
-    }
-}
-
-// MARK: - Proof checklist
-
-struct ProofChecklist: View {
-    let proof: FilmProof
-
-    static func rows(_ proof: FilmProof) -> [(title: String, proved: Bool, symbol: String)] {
-        [
-            ("Creation canon", proof.creation, "person.crop.rectangle.stack"),
-            ("Selected clips", proof.clips, "film.stack"),
-            ("Playable assembly", proof.assembly, "play.rectangle"),
-            ("Dialogue intelligibility", proof.dialogue, "quote.bubble"),
-            ("Sound and loudness", proof.sound, "waveform"),
-            ("Caption sidecars", proof.captions, "captions.bubble"),
-            ("Visual inspection", proof.inspection, "eye"),
-            ("Independent review", proof.review, "person.badge.shield.checkmark"),
-            ("Human decision", proof.humanReview, "hand.raised"),
-            ("Delivery manifest", proof.delivery, "shippingbox"),
-        ]
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Proof")
-                .panelTitle()
-            ForEach(Self.rows(proof), id: \.title) { row in
-                HStack(spacing: 10) {
-                    Image(systemName: row.proved ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(row.proved ? Studio.pass : Color.secondary.opacity(0.4))
-                        .contentTransition(.symbolEffect(.replace))
-                    Label(row.title, systemImage: row.symbol)
-                        .font(.callout)
-                    Spacer()
-                    Text(row.proved ? "Proved" : "Pending")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(row.proved ? AnyShapeStyle(Studio.pass) : AnyShapeStyle(.tertiary))
-                }
-            }
-        }
-        .animation(.spring(duration: 0.4), value: proof)
-        .studioPanel()
     }
 }
 
@@ -209,7 +141,7 @@ struct MetricCard: View {
 /// Off-main decode with downsampling and an in-memory cache, so keyframe
 /// grids scroll without hitching on full-resolution renders.
 enum ArtifactImageLoader {
-    @MainActor private static let cache = NSCache<NSURL, NSImage>()
+    @MainActor private static let cache = NSCache<NSString, NSImage>()
 
     private struct DecodedImage: @unchecked Sendable {
         // The wrapper exists only to carry the non-Sendable NSImage across the
@@ -218,14 +150,17 @@ enum ArtifactImageLoader {
         let image: NSImage?
     }
 
+    /// `revision` is the artifact's content hash: rerolls rewrite the same
+    /// path, so the path alone would pin the stale frame forever.
     @MainActor
-    static func load(_ url: URL, maxPixels: Int = 1_000) async -> NSImage? {
-        if let hit = cache.object(forKey: url as NSURL) { return hit }
+    static func load(_ url: URL, revision: String?, maxPixels: Int = 1_000) async -> NSImage? {
+        let key = "\(url.path)|\(revision ?? "")" as NSString
+        if let hit = cache.object(forKey: key) { return hit }
         let decoded = await Task.detached(priority: .utility) {
             DecodedImage(image: decode(url, maxPixels: maxPixels))
         }.value
         if let image = decoded.image {
-            cache.setObject(image, forKey: url as NSURL)
+            cache.setObject(image, forKey: key)
         }
         return decoded.image
     }
@@ -246,6 +181,7 @@ enum ArtifactImageLoader {
 
 struct ArtifactImage: View {
     let url: URL?
+    var revision: String?
     @State private var image: NSImage?
 
     var body: some View {
@@ -265,12 +201,12 @@ struct ArtifactImage: View {
             }
             .clipped()
             .animation(.easeOut(duration: 0.22), value: image != nil)
-        .task(id: url) {
+        .task(id: "\(url?.path ?? "")|\(revision ?? "")") {
             guard let url else {
                 image = nil
                 return
             }
-            image = await ArtifactImageLoader.load(url)
+            image = await ArtifactImageLoader.load(url, revision: revision)
         }
     }
 }

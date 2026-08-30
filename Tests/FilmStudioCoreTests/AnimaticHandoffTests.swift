@@ -29,6 +29,30 @@ struct AnimaticHandoffTests {
         #expect(manifestDigest == (try AnimaticHandoffBuilder.sha256(file: output)))
     }
 
+    @Test func handoffKeepsOnlyNewestAssetWhenLedgerRepeatsPath() throws {
+        let fixture = try WorkspaceFixture()
+        let manifestURL = fixture.root.appending(path: "film-project.json")
+        guard var project = try JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [String: Any],
+              let existingArtifacts = project["artifacts"] as? [[String: Any]],
+              let keyframe = existingArtifacts.first(where: { $0["kind"] as? String == "shot-keyframe" }) else {
+            Issue.record("fixture project JSON did not match the expected shape")
+            return
+        }
+        // A reroll appends a fresh entry for the same path; the stale entry
+        // stays in the ledger history.
+        var stale = keyframe
+        stale["sha256"] = "sha256:" + String(repeating: "0", count: 64)
+        project["artifacts"] = [stale] + existingArtifacts
+        try JSONSerialization.data(withJSONObject: project, options: [.sortedKeys]).write(to: manifestURL)
+
+        let snapshot = try FilmProjectLoader.load(runManifest: fixture.runManifest)
+        let handoff = try AnimaticHandoffBuilder.build(from: snapshot)
+
+        #expect(handoff.assets.count == 3)
+        #expect(handoff.assets.filter { $0.relativePath == keyframe["path"] as? String }.count == 1)
+        #expect(handoff.shots[0].keyframeAssetId != nil)
+    }
+
     @Test func handoffRejectsTamperedArtifacts() throws {
         let fixture = try WorkspaceFixture()
         try Data("tampered".utf8).write(to: fixture.root.appending(path: "frames/relay-answers.png"))

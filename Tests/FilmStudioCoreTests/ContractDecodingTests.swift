@@ -3,6 +3,21 @@ import Testing
 @testable import FilmStudioCore
 
 struct ContractDecodingTests {
+    @Test func rejectsProductionPlanFromAnotherProject() throws {
+        let fixture = try WorkspaceFixture()
+        let planURL = fixture.root.appending(path: "production-plan.json")
+        guard var plan = try JSONSerialization.jsonObject(with: Data(contentsOf: planURL)) as? [String: Any] else {
+            Issue.record("fixture plan JSON did not match the expected shape")
+            return
+        }
+        plan["projectId"] = "someone-elses-film"
+        try JSONSerialization.data(withJSONObject: plan, options: [.sortedKeys]).write(to: planURL)
+
+        #expect(throws: FilmProjectError.self) {
+            _ = try FilmProjectLoader.load(runManifest: fixture.runManifest)
+        }
+    }
+
     @Test func loadsCanonicalFilmLedgerAndNestedBrief() throws {
         let fixture = try WorkspaceFixture()
         let snapshot = try FilmProjectLoader.load(runManifest: fixture.runManifest)

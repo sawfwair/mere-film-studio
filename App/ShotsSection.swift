@@ -16,10 +16,12 @@ struct ShotBoardView: View {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
                         ForEach(Array(shots.enumerated()), id: \.element.id) { index, shot in
+                            let keyframe = keyframeArtifact(for: shot.id)
                             ShotCard(
                                 index: index,
                                 shot: shot,
-                                keyframe: keyframe(for: shot.id),
+                                keyframe: keyframe.map(snapshot.artifactURL),
+                                keyframeRevision: keyframe?.sha256,
                                 clip: clip(for: shot.id),
                                 selected: studio.selectedShotID == shot.id
                             ) {
@@ -33,9 +35,9 @@ struct ShotBoardView: View {
                                 if let clip = clip(for: shot.id) {
                                     Button("Open clip") { NSWorkspace.shared.open(clip) }
                                 }
-                                if let keyframe = keyframe(for: shot.id) {
+                                if let keyframe {
                                     Button("Show keyframe in Finder") {
-                                        NSWorkspace.shared.activateFileViewerSelecting([keyframe])
+                                        NSWorkspace.shared.activateFileViewerSelecting([snapshot.artifactURL(keyframe)])
                                     }
                                 }
                                 Button("Copy motion prompt") {
@@ -84,10 +86,10 @@ struct ShotBoardView: View {
         studio.selectedShotID = shots[target].id
     }
 
-    private func keyframe(for shotID: String) -> URL? {
+    private func keyframeArtifact(for shotID: String) -> FilmArtifact? {
         snapshot.project.artifacts.last {
             $0.kind == .shotKeyframe && $0.path.hasSuffix("/\(shotID).png")
-        }.map(snapshot.artifactURL)
+        }
     }
 
     private func clip(for shotID: String) -> URL? {
@@ -101,6 +103,7 @@ private struct ShotCard: View {
     let index: Int
     let shot: FilmProductionShot
     let keyframe: URL?
+    let keyframeRevision: String?
     let clip: URL?
     let selected: Bool
     let select: () -> Void
@@ -135,7 +138,7 @@ private struct ShotCard: View {
     private var slate: some View {
         ZStack(alignment: .bottom) {
             ZStack {
-                ArtifactImage(url: keyframe)
+                ArtifactImage(url: keyframe, revision: keyframeRevision)
                 if hovering, let clip {
                     LoopingClipView(url: clip)
                         .transition(.opacity)

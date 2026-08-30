@@ -79,6 +79,20 @@ struct WelcomeView: View {
                     .buttonStyle(StudioSecondaryButtonStyle())
                 }
                 .entrance(appeared, delay: 0.24)
+
+                if !existingRecents.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Recent films")
+                            .panelTitle()
+                        VStack(spacing: 2) {
+                            ForEach(existingRecents.prefix(5)) { film in
+                                RecentFilmRow(film: film)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: 560, alignment: .leading)
+                    .entrance(appeared, delay: 0.3)
+                }
             }
 
             GateCard()
@@ -86,6 +100,72 @@ struct WelcomeView: View {
         }
         .padding(64)
         .onAppear { appeared = true }
+    }
+
+    /// A film deleted from disk is gone; showing it would be a dead end.
+    private var existingRecents: [RecentFilm] {
+        studio.recentFilms.filter { FileManager.default.fileExists(atPath: $0.path) }
+    }
+}
+
+private struct RecentFilmRow: View {
+    @EnvironmentObject private var studio: StudioModel
+    let film: RecentFilm
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button {
+            studio.openProject(URL(fileURLWithPath: film.path))
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "film")
+                    .foregroundStyle(Studio.accent)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(film.title)
+                        .font(.callout.weight(.medium))
+                        .lineLimit(1)
+                    Text(folder)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 12)
+                if hovering {
+                    Button {
+                        studio.removeRecent(film)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Remove from recent films")
+                    .accessibilityLabel("Remove \(film.title) from recent films")
+                } else {
+                    Text(film.openedAt.formatted(.relative(presentation: .named)))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .contentShape(RoundedRectangle(cornerRadius: Studio.radiusSmall + 2, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .background(
+            Color.white.opacity(hovering ? 0.05 : 0),
+            in: RoundedRectangle(cornerRadius: Studio.radiusSmall + 2, style: .continuous)
+        )
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .onHover { hovering = $0 }
+    }
+
+    private var folder: String {
+        URL(fileURLWithPath: film.path).deletingLastPathComponent().path
+            .replacingOccurrences(of: NSHomeDirectory(), with: "~")
     }
 }
 

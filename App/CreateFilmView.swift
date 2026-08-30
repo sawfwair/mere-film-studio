@@ -8,6 +8,16 @@ struct CreateFilmView: View {
     @State private var title = ""
     @State private var duration = 45
     @State private var parentDirectory = URL(fileURLWithPath: NSHomeDirectory()).appending(path: "Movies/Mere Films")
+    /// Set once Create is clicked, so this sheet shows creation progress and
+    /// failures without reacting to unrelated studio activity.
+    @State private var submitted = false
+
+    private var creating: Bool { submitted && studio.isBusy }
+
+    private var creationError: String? {
+        guard submitted, !studio.isBusy else { return nil }
+        return studio.errorMessage
+    }
 
     private static let durations = [15, 30, 45, 60, 90, 120]
 
@@ -71,24 +81,58 @@ struct CreateFilmView: View {
 
             Divider()
 
+            if let creationError {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Studio.fail)
+                    Text(creationError)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(3)
+                        .textSelection(.enabled)
+                    Spacer(minLength: 0)
+                }
+                .padding(14)
+                .background(Studio.raised, in: RoundedRectangle(cornerRadius: Studio.radiusMedium, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Studio.radiusMedium, style: .continuous)
+                        .strokeBorder(Studio.fail.opacity(0.35))
+                }
+            }
+
             HStack {
                 Button("Cancel", role: .cancel) { dismiss() }
                     .buttonStyle(StudioSecondaryButtonStyle())
                     .keyboardShortcut(.cancelAction)
+                    .disabled(creating)
                 Spacer()
-                Button {
-                    studio.createFilm(
-                        idea: idea.trimmingCharacters(in: .whitespacesAndNewlines),
-                        title: effectiveTitle,
-                        duration: duration,
-                        parentDirectory: availableDirectory()
-                    )
-                } label: {
-                    Label("Create film", systemImage: "arrow.right")
+                if creating {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(studio.activity.isEmpty ? "Creating the studio project…" : studio.activity)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Button("Stop") { studio.cancelRunning() }
+                            .buttonStyle(StudioSecondaryButtonStyle())
+                    }
+                } else {
+                    Button {
+                        submitted = true
+                        studio.createFilm(
+                            idea: idea.trimmingCharacters(in: .whitespacesAndNewlines),
+                            title: effectiveTitle,
+                            duration: duration,
+                            parentDirectory: availableDirectory()
+                        )
+                    } label: {
+                        Label("Create film", systemImage: "arrow.right")
+                    }
+                    .buttonStyle(StudioPrimaryButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(idea.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || studio.isBusy)
                 }
-                .buttonStyle(StudioPrimaryButtonStyle())
-                .keyboardShortcut(.defaultAction)
-                .disabled(idea.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || studio.isBusy)
             }
         }
         .padding(28)

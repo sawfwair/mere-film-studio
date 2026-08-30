@@ -91,6 +91,13 @@ public final class GhosttySurfaceView: NSView {
     nonisolated(unsafe) var surface: ghostty_surface_t?
     let model: GhosttyTerminalModel
     private var isFocused = false
+    // Internal so the NSTextInputClient extension (same module, separate
+    // file) can read and update composition state.
+    /// IME composition in progress (dead keys, CJK input).
+    var markedText = NSMutableAttributedString()
+    /// Non-nil only while a keyDown is letting the input context translate
+    /// the event; collects the text the IME commits for that key.
+    var keyTextAccumulator: [String]?
 
     public override var acceptsFirstResponder: Bool { true }
     public override var isFlipped: Bool { true }
@@ -108,7 +115,11 @@ public final class GhosttySurfaceView: NSView {
         model.resetSessionState()
         focusRingType = .none
 
-        guard let app = runtime.application else { return }
+        guard let app = runtime.application else {
+            // No Ghostty runtime at all — never present a healthy blank pane.
+            model.setRendererHealthy(false)
+            return
+        }
         var config = ghostty_surface_config_new()
         config.platform_tag = GHOSTTY_PLATFORM_MACOS
         config.platform = ghostty_platform_u(
@@ -141,6 +152,11 @@ public final class GhosttySurfaceView: NSView {
             }
         }
 
+        if surface == nil {
+            // A blank pane that claims to be healthy would violate the
+            // visible-failure rule (DECISIONS.md 003).
+            model.setRendererHealthy(false)
+        }
         updateAppearance()
     }
 
@@ -203,12 +219,36 @@ public final class GhosttySurfaceView: NSView {
     }
 
     public override func keyDown(with event: NSEvent) {
-        sendKey(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
+        let action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
+        // Let the input context translate first so dead keys and CJK input
+        // methods can compose; what it commits arrives via insertText into
+        // the accumulator, still paired with this physical key event.
+        let hadMarkedText = markedText.length > 0
+        keyTextAccumulator = []
+        defer { keyTextAccumulator = nil }
+        inputContext?.handleEvent(event)
+
+        if let committed = keyTextAccumulator, !committed.isEmpty {
+            for text in committed {
+                sendKey(event, action: action, overrideText: text)
+            }
+        } else if hadMarkedText || markedText.length > 0 {
+            // The key belongs to the composition; Ghostty still sees the
+            // physical event but must not insert text for it.
+            sendKey(event, action: action, composing: true)
+        } else {
+            sendKey(event, action: action)
+        }
     }
 
     public override func keyUp(with event: NSEvent) {
         sendKey(event, action: GHOSTTY_ACTION_RELEASE)
     }
+
+    // Non-inserting keys (arrows, control chords) come back from the input
+    // context as editor commands; the raw key event already goes to the
+    // surface, so swallow them instead of letting NSResponder beep.
+    public override func doCommand(by selector: Selector) {}
 
     @objc public func paste(_ sender: Any?) {
         guard let surface, let text = NSPasteboard.general.string(forType: .string) else { return }
@@ -260,19 +300,24 @@ public final class GhosttySurfaceView: NSView {
         ghostty_surface_mouse_pos(surface, backing.x, backing.y, event.ghosttyModifiers)
     }
 
-    private func sendKey(_ event: NSEvent, action: ghostty_input_action_e) {
+    private func sendKey(
+        _ event: NSEvent,
+        action: ghostty_input_action_e,
+        overrideText: String? = nil,
+        composing: Bool = false
+    ) {
         guard let surface else { return }
         var input = ghostty_input_key_s()
         input.action = action
         input.keycode = UInt32(event.keyCode)
         input.mods = event.ghosttyModifiers
         input.consumed_mods = event.ghosttyConsumedModifiers
-        input.composing = false
+        input.composing = composing
         if let scalar = event.characters(byApplyingModifiers: [])?.unicodeScalars.first {
             input.unshifted_codepoint = scalar.value
         }
 
-        let text = event.ghosttyCharacters
+        let text = composing ? nil : (overrideText ?? event.ghosttyCharacters)
         if let text {
             text.withCString { pointer in
                 input.text = pointer

@@ -36,9 +36,22 @@ enum StudioSection: String, CaseIterable, Identifiable {
     }
 }
 
+/// A film the studio has opened before. Presentation state only (ADR-005):
+/// the list is a convenience bookmark, never canonical project state.
+struct RecentFilm: Codable, Identifiable, Equatable {
+    let path: String
+    let title: String
+    let openedAt: Date
+
+    var id: String { path }
+}
+
 /// An approval the human has been asked to confirm. Presented as a sheet so
 /// gates are never approved sight-unseen and always carry a real note.
+/// Bound to the run it was prepared for: an approval must never land on a
+/// project the human wasn't looking at.
 struct PendingApproval: Identifiable {
+    let runManifest: URL
     let gate: FilmGate
     let summary: String?
 
@@ -66,6 +79,7 @@ final class StudioModel: ObservableObject {
     @Published var pendingApproval: PendingApproval?
     @Published var approvalNote = ""
     @Published private(set) var watchingFiles = true
+    @Published private(set) var recentFilms: [RecentFilm] = []
 
     @Published var filmToolExecutable: String {
         didSet {
@@ -109,6 +123,10 @@ final class StudioModel: ObservableObject {
         mereRunExecutable = UserDefaults.standard.string(forKey: "mereRunExecutable")
             ?? ProcessInfo.processInfo.environment["MERE_RUN_EXECUTABLE"]
             ?? "mere.run"
+        if let data = UserDefaults.standard.data(forKey: "recentFilms"),
+           let decoded = try? JSONDecoder().decode([RecentFilm].self, from: data) {
+            recentFilms = decoded
+        }
         let arguments = ProcessInfo.processInfo.arguments
         let argumentManifest = arguments.firstIndex(of: "--run-manifest").flatMap { index in
             arguments.indices.contains(index + 1) ? arguments[index + 1] : nil
@@ -126,17 +144,26 @@ final class StudioModel: ObservableObject {
     func chooseProject() {
         let panel = NSOpenPanel()
         panel.title = "Open a Mere film"
-        panel.message = "Choose the run.json created by mere-film-tools."
+        panel.message = "Choose a film project folder, or the run.json inside it."
         panel.prompt = "Open Film"
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
+        panel.canChooseDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         openProject(url)
     }
 
     func openProject(_ url: URL, reportErrors: Bool = true) {
-        let target = url.lastPathComponent == "run.json" ? url : url.appending(path: "run.json")
+        // Accept the manifest itself, any sibling ledger file the user picked
+        // instead (film-project.json, brief.json…), or the project folder.
+        let target: URL
+        if url.lastPathComponent == "run.json" {
+            target = url
+        } else if url.pathExtension == "json" {
+            target = url.deletingLastPathComponent().appending(path: "run.json")
+        } else {
+            target = url.appending(path: "run.json")
+        }
         let generation = UUID()
         loadGeneration = generation
         Task { @MainActor [weak self] in
@@ -153,6 +180,9 @@ final class StudioModel: ObservableObject {
                 if !reportErrors { self.startupNotice = nil }
                 self.errorMessage = nil
             } catch {
+                // A failure from a superseded load must not alert over the
+                // project that replaced it.
+                guard self.loadGeneration == generation else { return }
                 // Watcher-driven refreshes race the tools' writes; a transient
                 // decode failure must never interrupt work already on screen.
                 if reportErrors {
@@ -182,10 +212,15 @@ final class StudioModel: ObservableObject {
             piRoomConfiguration = nil
             handoffReceipt = nil
             handoffValidation = nil
+            selectedShotID = nil
         }
         snapshot = loaded
-        selectedShotID = selectedShotID ?? loaded.productionPlan?.shots.first?.id
+        let shots = loaded.productionPlan?.shots ?? []
+        if !shots.contains(where: { $0.id == selectedShotID }) {
+            selectedShotID = shots.first?.id
+        }
         UserDefaults.standard.set(loaded.runManifest.path, forKey: "lastFilmRunManifest")
+        recordRecent(loaded)
         do {
             watcher = try FilmWorkspaceWatcher(root: loaded.root) { [weak self] in
                 Task { @MainActor in self?.refresh() }
@@ -201,6 +236,8 @@ final class StudioModel: ObservableObject {
     }
 
     func closeProject() {
+        // Invalidate any load still in flight so it can't reopen the film.
+        loadGeneration = UUID()
         watcher = nil
         snapshot = nil
         selectedShotID = nil
@@ -212,6 +249,25 @@ final class StudioModel: ObservableObject {
         piSetupTask?.cancel()
         commandTask?.cancel()
         UserDefaults.standard.removeObject(forKey: "lastFilmRunManifest")
+    }
+
+    private func recordRecent(_ loaded: FilmWorkspaceSnapshot) {
+        var list = recentFilms.filter { $0.path != loaded.runManifest.path }
+        list.insert(
+            RecentFilm(path: loaded.runManifest.path, title: loaded.project.title, openedAt: Date()),
+            at: 0
+        )
+        recentFilms = Array(list.prefix(8))
+        persistRecents()
+    }
+
+    func removeRecent(_ film: RecentFilm) {
+        recentFilms.removeAll { $0.path == film.path }
+        persistRecents()
+    }
+
+    private func persistRecents() {
+        UserDefaults.standard.set(try? JSONEncoder().encode(recentFilms), forKey: "recentFilms")
     }
 
     func restartTerminal() {
